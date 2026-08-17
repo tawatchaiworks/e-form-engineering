@@ -1,0 +1,88 @@
+{
+  "entities": {
+    "requests": {
+      "title": "EEngineerRequest",
+      "description": "E-Engineer service request documents and lifecycle tracking",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "docNumber": { "type": "string" },
+        "docIndex": { "type": "number" },
+        "status": { "type": "string" },
+        "saleName": { "type": "string" },
+        "saleContact": { "type": "string" },
+        "customerName": { "type": "string" },
+        "customerContact": { "type": "string" },
+        "jobTitle": { "type": "string" },
+        "serviceType": { "type": "string" },
+        "targetDate": { "type": "string" },
+        "targetTime": { "type": "string" },
+        "assignedEngineerId": { "type": "string" },
+        "assignedEngineerName": { "type": "string" },
+        "workPhotos": { "type": "array" },
+        "history": { "type": "array" }
+      },
+      "required": ["id", "docNumber", "status", "jobTitle"]
+    },
+    "staff": {
+      "title": "StaffMember",
+      "description": "Staff and engineer member profiles",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string" },
+        "phone": { "type": "string" },
+        "workStatus": { "type": "string" }
+      },
+      "required": ["id", "name", "role"]
+    },
+    "inquiries": {
+      "title": "EngineerInquiry",
+      "description": "Sales to engineer question inquiries and replies",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "requestId": { "type": "string" },
+        "saleName": { "type": "string" },
+        "engineerName": { "type": "string" },
+        "question": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["id", "requestId", "question", "status"]
+    },
+    "daily_attendance": {
+      "title": "EngineerDailyAttendance",
+      "description": "Daily engineer check-in and check-out logs",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "engineerId": { "type": "string" },
+        "engineerName": { "type": "string" },
+        "date": { "type": "string" },
+        "checkInTime": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["id", "engineerId", "date"]
+    }
+  },
+  "firestore": {
+    "requests": {
+      "schema": "requests",
+      "description": "Service request documents"
+    },
+    "staff": {
+      "schema": "staff",
+      "description": "Staff roster and availability status"
+    },
+    "inquiries": {
+      "schema": "inquiries",
+      "description": "Direct inquiry messages"
+    },
+    "daily_attendance": {
+      "schema": "daily_attendance",
+      "description": "Engineer daily check-in/out records"
+    }
+  }
+}
