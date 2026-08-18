@@ -61,7 +61,7 @@ export const AdminSaleForm: React.FC<AdminSaleFormProps> = ({
       setIsAuthorized(true);
       setAuthError(null);
     } else {
-      setAuthError('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง กรุณาใช้ user: Admin Sale และ password: Admin Sale');
+      setAuthError('ชื่อผู้ใช้งานหรือรหัสผ่านไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง');
     }
     setIsSubmitting(false);
   };
@@ -432,12 +432,6 @@ export const AdminSaleForm: React.FC<AdminSaleFormProps> = ({
                 หน้านี้สงวนสิทธิ์เฉพาะทีมงาน Admin Sale เท่านั้น กรุณากรอกรหัสผ่านเพื่อเข้าใช้งาน
               </p>
             </div>
-
-            {/* Quick Security Hint Badge */}
-            <div className="inline-flex items-center gap-2 bg-slate-800/90 border border-slate-700/80 rounded-xl px-3.5 py-1.5 text-xs text-slate-300">
-              <KeyRound className="w-3.5 h-3.5 text-amber-400" />
-              <span>ความปลอดภัย: <strong>User: Admin Sale</strong> | <strong>Password: Admin Sale</strong></span>
-            </div>
           </div>
 
           {/* Sign In Form */}
@@ -466,7 +460,7 @@ export const AdminSaleForm: React.FC<AdminSaleFormProps> = ({
                   required
                   value={usernameInput}
                   onChange={e => setUsernameInput(e.target.value)}
-                  placeholder="กรอกชื่อผู้ใช้งาน (เช่น Admin Sale)"
+                  placeholder="กรอกชื่อผู้ใช้งาน Admin Sale"
                   className="w-full pl-10 pr-4 py-3 bg-slate-800/90 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent transition"
                   autoFocus
                 />
@@ -487,7 +481,7 @@ export const AdminSaleForm: React.FC<AdminSaleFormProps> = ({
                   required
                   value={passwordInput}
                   onChange={e => setPasswordInput(e.target.value)}
-                  placeholder="กรอกรหัสผ่าน (เช่น Admin Sale)"
+                  placeholder="กรอกรหัสผ่าน"
                   className="w-full pl-10 pr-11 py-3 bg-slate-800/90 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent transition"
                 />
                 <button
@@ -510,20 +504,6 @@ export const AdminSaleForm: React.FC<AdminSaleFormProps> = ({
               >
                 <Unlock className="w-4 h-4 text-slate-950" />
                 <span>เข้าสู่ระบบ Admin Sale (Sign In)</span>
-              </button>
-
-              <button
-                type="button"
-                id="btn-autofill-adminsale"
-                onClick={() => {
-                  setUsernameInput('Admin Sale');
-                  setPasswordInput('Admin Sale');
-                  setAuthError(null);
-                }}
-                className="w-full py-2 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold border border-slate-700 transition flex items-center justify-center gap-1.5 cursor-pointer"
-              >
-                <Zap className="w-3.5 h-3.5 text-amber-400" />
-                <span>กรอกข้อมูลทดสอบอัตโนมัติ (Quick Fill: Admin Sale / Admin Sale)</span>
               </button>
             </div>
 
