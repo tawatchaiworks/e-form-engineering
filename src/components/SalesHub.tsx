@@ -4,7 +4,8 @@ import {
   MapPin, Send, MessageSquare, Star, User, ChevronRight, PenTool, Check,
   Info, ExternalLink, RefreshCw, X, Radio, Eye, EyeOff, Printer, FileText,
   FileCode, Image as ImageIcon, Film, File, Camera, ZoomIn,
-  Lock, Unlock, KeyRound, LogOut, Zap, UserCheck
+  Lock, Unlock, KeyRound, LogOut, Zap, UserCheck,
+  CheckCircle, CheckCheck, Search, Filter, Award, Sparkles, Layers
 } from 'lucide-react';
 import { 
   EEngineerRequest, StaffMember, EngineerInquiry, 
@@ -113,6 +114,11 @@ export const SalesHub: React.FC<SalesHubProps> = ({
   const [inquiryMessage, setInquiryMessage] = useState('');
   const [inquirySuccessToast, setInquirySuccessToast] = useState(false);
 
+  // Hub View Tabs and Completed Jobs Filter states
+  const [activeHubTab, setActiveHubTab] = useState<'all' | 'alerts' | 'completed' | 'inquiries'>('all');
+  const [completedSearchQuery, setCompletedSearchQuery] = useState<string>('');
+  const [completedStatusFilter, setCompletedStatusFilter] = useState<'all' | 'closed' | 'completed_by_customer' | 'completed_by_engineer'>('all');
+
   const salesStaff = staff.filter(s => s.team === 'SALE' || s.team === 'SALE MANAGER');
   const engineers = staff.filter(s => s.team === 'Engineer');
 
@@ -147,6 +153,46 @@ export const SalesHub: React.FC<SalesHubProps> = ({
 
   // 7. กล่องเขียว: วิศวกรส่งมอบงานแล้ว (status: completed_by_engineer หรือ completed_by_customer)
   const completedByEngineerRequests = filteredRequests.filter(r => r.status === 'completed_by_engineer' || r.status === 'completed_by_customer');
+
+  // 8. รวมงานที่เสร็จแล้วทั้งหมด (Completed & Handed-over Jobs): completed_by_engineer, completed_by_customer, closed
+  const rawCompletedHandedOverRequests = filteredRequests.filter(r => 
+    ['completed_by_engineer', 'completed_by_customer', 'closed'].includes(r.status)
+  );
+
+  // Filter Completed & Handed-over jobs by search & sub-status
+  const completedHandedOverRequests = rawCompletedHandedOverRequests.filter(r => {
+    if (completedStatusFilter !== 'all' && r.status !== completedStatusFilter) {
+      return false;
+    }
+    if (completedSearchQuery.trim()) {
+      const q = completedSearchQuery.toLowerCase().trim();
+      const matchSO = r.soNumber?.toLowerCase().includes(q);
+      const matchDoc = r.docNumber?.toLowerCase().includes(q);
+      const matchProj = r.projectName?.toLowerCase().includes(q);
+      const matchCust = r.customerName?.toLowerCase().includes(q);
+      const matchEng = r.assignedEngineer?.toLowerCase().includes(q);
+      const matchSales = r.salesOwner?.toLowerCase().includes(q);
+      const matchDetails = r.workDetails?.toLowerCase().includes(q);
+      const matchLoc = r.checkInData?.address?.toLowerCase().includes(q);
+      if (!matchSO && !matchDoc && !matchProj && !matchCust && !matchEng && !matchSales && !matchDetails && !matchLoc) {
+        return false;
+      }
+    }
+    return true;
+  });
+
+  // Count summaries
+  const totalActiveAlertsCount = newPendingSignRequests.length + 
+    rejectedRequests.length + 
+    rescheduledRequests.length + 
+    readyForSiteRequests.length + 
+    oneDayWarningRequests.length + 
+    overdueRequests.length + 
+    completedByEngineerRequests.length;
+
+  const totalClosedCount = rawCompletedHandedOverRequests.filter(r => r.status === 'closed').length;
+  const totalCustomerEvalCount = rawCompletedHandedOverRequests.filter(r => r.status === 'completed_by_customer').length;
+  const totalEngineerHandedOverCount = rawCompletedHandedOverRequests.filter(r => r.status === 'completed_by_engineer').length;
 
   // Action: Sales Sign & Assign to Engineer
   const handleConfirmSalesSign = (req: EEngineerRequest) => {
@@ -552,7 +598,78 @@ export const SalesHub: React.FC<SalesHubProps> = ({
         </div>
       </div>
 
+      {/* 🧭 NAVIGATION QUICK TABS */}
+      <div className="flex flex-wrap items-center gap-2 bg-slate-900/90 p-2 rounded-2xl border border-slate-800 shadow-sm">
+        <button
+          type="button"
+          onClick={() => setActiveHubTab('all')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-extrabold transition cursor-pointer ${
+            activeHubTab === 'all'
+              ? 'bg-blue-600 text-white shadow-md'
+              : 'text-slate-300 hover:text-white hover:bg-slate-800'
+          }`}
+        >
+          <Layers className="w-3.5 h-3.5" />
+          <span>ทั้งหมด (All Hub Overview)</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveHubTab('alerts')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-extrabold transition cursor-pointer ${
+            activeHubTab === 'alerts'
+              ? 'bg-red-600 text-white shadow-md'
+              : 'text-slate-300 hover:text-white hover:bg-slate-800'
+          }`}
+        >
+          <AlertTriangle className="w-3.5 h-3.5" />
+          <span>กล่องแจ้งเตือนด่วน (Alert Boxes)</span>
+          {totalActiveAlertsCount > 0 && (
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-white text-red-700">
+              {totalActiveAlertsCount}
+            </span>
+          )}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveHubTab('completed')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-extrabold transition cursor-pointer ${
+            activeHubTab === 'completed'
+              ? 'bg-emerald-600 text-white shadow-md'
+              : 'text-slate-300 hover:text-white hover:bg-slate-800'
+          }`}
+        >
+          <CheckCircle className="w-3.5 h-3.5 text-emerald-300" />
+          <span>งานที่เสร็จแล้ว (Completed & Handed-over Jobs)</span>
+          <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+            activeHubTab === 'completed' ? 'bg-white text-emerald-800' : 'bg-emerald-950 text-emerald-300 border border-emerald-500/40'
+          }`}>
+            {rawCompletedHandedOverRequests.length} งาน
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveHubTab('inquiries')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-extrabold transition cursor-pointer ${
+            activeHubTab === 'inquiries'
+              ? 'bg-indigo-600 text-white shadow-md'
+              : 'text-slate-300 hover:text-white hover:bg-slate-800'
+          }`}
+        >
+          <MessageSquare className="w-3.5 h-3.5" />
+          <span>สอบถามช่าง Engineer</span>
+          {inquiries.length > 0 && (
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-slate-700 text-white">
+              {inquiries.length}
+            </span>
+          )}
+        </button>
+      </div>
+
       {/* 6 COLOR ALERT BOXES SECTION */}
+      {(activeHubTab === 'all' || activeHubTab === 'alerts') && (
       <div className="space-y-4">
         
         {/* ======================================================== */}
@@ -1421,10 +1538,512 @@ export const SalesHub: React.FC<SalesHubProps> = ({
         )}
 
       </div>
+      )}
 
       {/* ======================================================== */}
-      {/* 8. กล่องสอบถามงาน Engineer (Inquiry System - 300 char) */}
+      {/* 8. ✅ งานที่เสร็จแล้ว (Completed & Handed-over Jobs) */}
       {/* ======================================================== */}
+      {(activeHubTab === 'all' || activeHubTab === 'completed') && (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden space-y-5 p-5 sm:p-6">
+          
+          {/* Section Header */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+            <div className="flex items-start space-x-3">
+              <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 shrink-0">
+                <CheckCheck className="w-6 h-6" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="text-base sm:text-lg font-bold text-slate-900">
+                    ✅ งานที่เสร็จแล้ว (Completed & Handed-over Jobs)
+                  </h3>
+                  <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-emerald-100 text-emerald-800 border border-emerald-200">
+                    {completedHandedOverRequests.length} / {rawCompletedHandedOverRequests.length} งาน
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  ประวัติงานที่วิศวกรส่งมอบเรียบร้อย & ปิดงานสมบูรณ์ 100% พร้อมรูป Before / After, ลายเซ็นดิจิทัล, และผลประเมิน 5 มิติ
+                </p>
+              </div>
+            </div>
+
+            {/* Quick Stat Counter Cards */}
+            <div className="flex items-center gap-2 flex-wrap text-xs">
+              <div className="px-3 py-1.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 font-bold flex items-center gap-1.5">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                <span>ปิดงาน 100%: <strong>{totalClosedCount}</strong></span>
+              </div>
+              <div className="px-3 py-1.5 rounded-xl bg-cyan-50 border border-cyan-200 text-cyan-900 font-bold flex items-center gap-1.5">
+                <Star className="w-4 h-4 text-amber-500 fill-amber-400" />
+                <span>ลูกค้าตรวจรับแล้ว: <strong>{totalCustomerEvalCount}</strong></span>
+              </div>
+              <div className="px-3 py-1.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 font-bold flex items-center gap-1.5">
+                <Clock className="w-4 h-4 text-amber-600" />
+                <span>ช่างส่งมอบแล้ว: <strong>{totalEngineerHandedOverCount}</strong></span>
+              </div>
+            </div>
+          </div>
+
+          {/* Search & Sub-status Filter Bar */}
+          <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3">
+            {/* Search Input */}
+            <div className="relative w-full sm:w-80">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="ค้นหา SO, โครงการ, ลูกค้า, ช่าง, เซลล์..."
+                value={completedSearchQuery}
+                onChange={e => setCompletedSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-8 py-1.5 text-xs rounded-lg border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 font-medium"
+              />
+              {completedSearchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setCompletedSearchQuery('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            {/* Status Filter Pills */}
+            <div className="flex items-center gap-1.5 flex-wrap w-full sm:w-auto">
+              <span className="text-xs text-slate-500 font-semibold flex items-center gap-1 mr-1">
+                <Filter className="w-3.5 h-3.5" /> กรองสถานะ:
+              </span>
+              {[
+                { key: 'all', label: `ทั้งหมด (${rawCompletedHandedOverRequests.length})` },
+                { key: 'closed', label: `ปิดงานสมบูรณ์ (${totalClosedCount})` },
+                { key: 'completed_by_customer', label: `ลูกค้าตรวจรับแล้ว (${totalCustomerEvalCount})` },
+                { key: 'completed_by_engineer', label: `ช่างส่งมอบ (${totalEngineerHandedOverCount})` },
+              ].map(tab => (
+                <button
+                  key={tab.key}
+                  type="button"
+                  onClick={() => setCompletedStatusFilter(tab.key as any)}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                    completedStatusFilter === tab.key
+                      ? 'bg-emerald-700 text-white shadow-xs'
+                      : 'bg-white text-slate-700 hover:bg-slate-200 border border-slate-200'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Completed Requests Cards Grid */}
+          {completedHandedOverRequests.length === 0 ? (
+            <div className="py-12 text-center rounded-xl bg-slate-50 border border-dashed border-slate-200 space-y-2">
+              <CheckCheck className="w-10 h-10 text-slate-300 mx-auto" />
+              <p className="text-sm font-bold text-slate-700">ไม่พบรายการงานที่เสร็จแล้วตรงตามเงื่อนไข</p>
+              <p className="text-xs text-slate-400">
+                ลองปรับเปลี่ยนคำค้นหาหรือตัวกรองสถานะด้านบน
+              </p>
+              {(completedSearchQuery || completedStatusFilter !== 'all') && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCompletedSearchQuery('');
+                    setCompletedStatusFilter('all');
+                  }}
+                  className="px-3.5 py-1.5 mt-2 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-bold transition"
+                >
+                  ล้างตัวกรองทั้งหมด
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              {completedHandedOverRequests.map(req => {
+                const beforePhotos = (req.workPhotos || []).filter(p => p.stage === 'before');
+                const afterPhotos = (req.workPhotos || []).filter(p => p.stage === 'after');
+                const hasPhotos = (req.workPhotos && req.workPhotos.length > 0);
+
+                return (
+                  <div
+                    key={req.id}
+                    className="bg-slate-50/70 rounded-2xl border border-emerald-200/80 hover:border-emerald-400 p-5 space-y-4 shadow-2xs hover:shadow-md transition flex flex-col justify-between"
+                  >
+                    <div className="space-y-3.5">
+                      
+                      {/* Card Top: SO No., Doc No., Status Badge & Print Button */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-emerald-700 text-white font-black text-xs font-mono shadow-xs">
+                              <span className="text-[9px] text-emerald-200 uppercase font-semibold">SO:</span>
+                              {req.soNumber}
+                            </span>
+                            <span className="text-[11px] px-2 py-0.5 rounded font-mono bg-white text-slate-700 border border-slate-200">
+                              {req.docNumber}
+                            </span>
+                            
+                            {/* Status Badges */}
+                            {req.status === 'closed' ? (
+                              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1">
+                                <CheckCheck className="w-3.5 h-3.5 text-emerald-600" />
+                                ปิดงานสมบูรณ์ 100%
+                              </span>
+                            ) : req.status === 'completed_by_customer' ? (
+                              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black bg-cyan-100 text-cyan-800 border border-cyan-300 flex items-center gap-1">
+                                <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-400" />
+                                ลูกค้าตรวจรับแล้ว 5★
+                              </span>
+                            ) : (
+                              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-300 flex items-center gap-1">
+                                <Clock className="w-3.5 h-3.5 text-amber-600" />
+                                ช่างส่งมอบงานแล้ว
+                              </span>
+                            )}
+                          </div>
+
+                          <h4 className="text-sm sm:text-base font-bold text-slate-900 leading-snug pt-0.5">
+                            {req.projectName}
+                          </h4>
+                          <p className="text-xs text-slate-500 font-medium">
+                            {req.customerName}
+                          </p>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => setPrintDocRequest(req)}
+                          className="px-2.5 py-1.5 rounded-lg bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 text-xs font-bold transition flex items-center gap-1 shrink-0 shadow-2xs cursor-pointer"
+                          title="เปิดดูและพิมพ์เอกสาร A4 รายงานปิดงานฉบับสมบูรณ์"
+                        >
+                          <Printer className="w-3.5 h-3.5 text-emerald-700" />
+                          <span className="hidden sm:inline">พิมพ์ A4</span>
+                        </button>
+                      </div>
+
+                      {/* Category Selection Badges */}
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {req.categories.service && (
+                          <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-800 font-bold text-[10px]">
+                            🛠️ บริการเข้าหน้างาน
+                          </span>
+                        )}
+                        {req.categories.countingDrawing && (
+                          <span className="px-2 py-0.5 rounded bg-indigo-100 text-indigo-800 font-bold text-[10px]">
+                            📐 ถอดแบบ
+                          </span>
+                        )}
+                        {req.categories.meetingOrMockup && (
+                          <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-800 font-bold text-[10px]">
+                            🤝 ประชุม/ม็อคอัพ
+                          </span>
+                        )}
+                        {req.categories.claimProduct && (
+                          <span className="px-2 py-0.5 rounded bg-rose-100 text-rose-800 font-bold text-[10px]">
+                            🔄 เคลมสินค้า
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Staff & Date Grid */}
+                      <div className="bg-white p-3 rounded-xl border border-slate-200 text-xs text-slate-700 space-y-1.5">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                          <div>
+                            <span className="font-bold text-slate-900">👤 เซลล์เจ้าของงาน:</span> คุณ{req.salesOwner}
+                          </div>
+                          <div>
+                            <span className="font-bold text-slate-900">👷‍♂️ วิศวกรผู้ปฏิบัติงาน:</span> ช่าง{req.assignedEngineer || '-'}
+                          </div>
+                          <div>
+                            <span className="font-bold text-slate-900">📅 วันที่ขอรับบริการ:</span> {req.requestDate}
+                          </div>
+                          <div>
+                            <span className="font-bold text-slate-900">⏱️ วันที่นัดหมาย/เข้างาน:</span> {req.targetDate}
+                          </div>
+                        </div>
+
+                        {req.checkInData?.address && (
+                          <div className="pt-1 text-[11px] text-slate-600 flex items-start gap-1 border-t border-slate-100">
+                            <MapPin className="w-3.5 h-3.5 text-rose-500 shrink-0 mt-0.5" />
+                            <span><strong>พิกัดเช็คอิน:</strong> {req.checkInData.address}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Work Details */}
+                      <div className="bg-white p-3 rounded-xl border border-slate-200 text-xs text-slate-700 space-y-1">
+                        <span className="font-bold text-slate-900 block">รายละเอียดงาน:</span>
+                        <p className="text-slate-600 line-clamp-3 leading-relaxed">{req.workDetails}</p>
+                      </div>
+
+                      {/* 📸 Photos Before / After Evidence */}
+                      <div className="bg-white p-3.5 rounded-xl border border-emerald-200/80 space-y-2.5">
+                        <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                          <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
+                            <Camera className="w-4 h-4 text-emerald-600" />
+                            <span>ภาพถ่ายผลงานก่อนทำ-หลังทำ ({req.workPhotos?.length || 0} รูป)</span>
+                          </div>
+                          <span className="text-[10px] text-amber-600 font-semibold">💡 คลิกดูรูปขยาย</span>
+                        </div>
+
+                        {hasPhotos ? (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            {/* Before photos */}
+                            <div className="space-y-1.5">
+                              <div className="flex items-center justify-between text-[11px] font-bold text-orange-800">
+                                <span>1. ก่อนทำ ({beforePhotos.length})</span>
+                              </div>
+                              {beforePhotos.length === 0 ? (
+                                <div className="p-2 text-center text-[10px] text-slate-400 italic bg-slate-50 rounded">
+                                  ไม่มีรูปก่อนทำ
+                                </div>
+                              ) : (
+                                <div className="space-y-1.5">
+                                  {beforePhotos.map(p => (
+                                    <div
+                                      key={p.id}
+                                      onClick={() => setActiveZoomPhoto(p)}
+                                      className="relative group cursor-pointer aspect-video bg-slate-900 rounded-lg overflow-hidden border border-orange-200"
+                                    >
+                                      <img src={p.url} alt={p.name} className="w-full h-full object-cover group-hover:scale-105 transition" />
+                                      <span className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded bg-black/70 text-white text-[9px] font-bold">
+                                        ก่อนทำ
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* After photos */}
+                            <div className="space-y-1.5">
+                              <div className="flex items-center justify-between text-[11px] font-bold text-emerald-800">
+                                <span>2. หลังทำ ({afterPhotos.length})</span>
+                              </div>
+                              {afterPhotos.length === 0 ? (
+                                <div className="p-2 text-center text-[10px] text-slate-400 italic bg-slate-50 rounded">
+                                  ไม่มีรูปหลังทำ
+                                </div>
+                              ) : (
+                                <div className="space-y-1.5">
+                                  {afterPhotos.map(p => (
+                                    <div
+                                      key={p.id}
+                                      onClick={() => setActiveZoomPhoto(p)}
+                                      className="relative group cursor-pointer aspect-video bg-slate-900 rounded-lg overflow-hidden border border-emerald-200"
+                                    >
+                                      <img src={p.url} alt={p.name} className="w-full h-full object-cover group-hover:scale-105 transition" />
+                                      <span className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded bg-emerald-900/80 text-emerald-200 text-[9px] font-bold">
+                                        หลังทำ
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="p-2.5 text-center text-xs text-slate-400 italic bg-slate-50 rounded-lg">
+                            ไม่มีรูปถ่ายประกอบผลงาน
+                          </div>
+                        )}
+                      </div>
+
+                      {/* 📁 Attached Files & Drive Link */}
+                      {((req.attachments && req.attachments.length > 0) || req.serverShareDriveLink) && (
+                        <div className="bg-white p-3 rounded-xl border border-slate-200 space-y-2 text-xs">
+                          <div className="flex items-center justify-between font-bold text-slate-800">
+                            <span className="flex items-center gap-1.5 text-blue-700">
+                              <FileText className="w-3.5 h-3.5" /> ไฟล์แนบประกอบงาน ({req.attachments?.length || 0} ไฟล์):
+                            </span>
+                          </div>
+
+                          {req.serverShareDriveLink && (
+                            <div className="text-[11px] text-indigo-700 bg-indigo-50 p-2 rounded-lg border border-indigo-200 flex items-center gap-1.5 truncate">
+                              <ExternalLink className="w-3 h-3 shrink-0" />
+                              <span className="font-bold">ลิงก์ Drive:</span>
+                              <a href={req.serverShareDriveLink} target="_blank" rel="noreferrer" className="underline truncate font-semibold">
+                                {req.serverShareDriveLink}
+                              </a>
+                            </div>
+                          )}
+
+                          {req.attachments && req.attachments.length > 0 && (
+                            <div className="flex flex-wrap gap-1.5">
+                              {req.attachments.map((att, idx) => (
+                                <button
+                                  key={att.id || idx}
+                                  type="button"
+                                  onClick={() => {
+                                    setActiveViewerRequest(req);
+                                    setActiveFileIndex(idx);
+                                  }}
+                                  className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-blue-50 hover:text-blue-700 border border-slate-200 text-[11px] font-semibold flex items-center gap-1 transition"
+                                >
+                                  <FileCode className="w-3 h-3 text-blue-600" />
+                                  <span className="truncate max-w-[120px]">{att.name}</span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* ⭐ Customer Satisfaction Breakdown */}
+                      {req.customerEvaluation && (
+                        <div className="p-3 bg-emerald-50/80 rounded-xl border border-emerald-200 text-xs space-y-1.5 text-emerald-950">
+                          <div className="font-bold flex items-center justify-between">
+                            <span className="flex items-center gap-1">
+                              <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-400" />
+                              ผลประเมินจากลูกค้า ({req.customerSignature?.signerName}):
+                            </span>
+                            <span className="text-[10px] text-emerald-700 font-semibold">{req.customerSignature?.signedAt}</span>
+                          </div>
+                          <div className="grid grid-cols-2 gap-1 text-[11px]">
+                            <span>• แต่งกาย/Safety: <strong>{req.customerEvaluation.grooming}★</strong></span>
+                            <span>• ความเชี่ยวชาญ: <strong>{req.customerEvaluation.knowledge}★</strong></span>
+                            <span>• แก้ปัญหาเฉพาะหน้า: <strong>{req.customerEvaluation.problemSolving}★</strong></span>
+                            <span>• มารยาท/สื่อสาร: <strong>{req.customerEvaluation.manner}★</strong></span>
+                          </div>
+                          {req.customerEvaluation.feedback && (
+                            <p className="text-[11px] italic text-slate-700 bg-white/80 p-2 rounded-lg border border-emerald-200/60 mt-1">
+                              &quot;{req.customerEvaluation.feedback}&quot;
+                            </p>
+                          )}
+                        </div>
+                      )}
+
+                      {/* 🎖️ Sales 5D Evaluation Breakdown */}
+                      {req.salesEvaluation && (
+                        <div className="p-3 bg-blue-50/80 rounded-xl border border-blue-200 text-xs space-y-1.5 text-blue-950">
+                          <div className="font-bold flex items-center justify-between">
+                            <span className="flex items-center gap-1">
+                              <Award className="w-3.5 h-3.5 text-blue-600" />
+                              ผลประเมิน 5 มิติฝ่ายขาย ({req.salesFinalSignature?.signerName || req.salesOwner}):
+                            </span>
+                            <span className="text-[10px] text-blue-700 font-semibold">
+                              {req.salesFinalSignature?.signedAt || req.salesEvaluation.evaluatedAt}
+                            </span>
+                          </div>
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-1 text-[11px]">
+                            <span>• สื่อสาร: <strong>{req.salesEvaluation.communication}★</strong></span>
+                            <span>• ตรงต่อเวลา: <strong>{req.salesEvaluation.punctuality}★</strong></span>
+                            <span>• คุณภาพงาน: <strong>{req.salesEvaluation.quality}★</strong></span>
+                            <span>• แก้ปัญหา: <strong>{req.salesEvaluation.problemSolving}★</strong></span>
+                            <span>• ภาพรวม: <strong>{req.salesEvaluation.overall}★</strong></span>
+                          </div>
+                          {req.salesEvaluation.description && (
+                            <p className="text-[11px] italic text-slate-700 bg-white/80 p-2 rounded-lg border border-blue-200/60 mt-1">
+                              &quot;{req.salesEvaluation.description}&quot;
+                            </p>
+                          )}
+                        </div>
+                      )}
+
+                    </div>
+
+                    {/* Card Bottom: If not yet closed, allow sales to close here */}
+                    {req.status !== 'closed' && (
+                      <div className="pt-3 border-t border-slate-200">
+                        {evaluatingRequestId === req.id ? (
+                          <div className="space-y-4 pt-2">
+                            <h5 className="text-xs font-bold text-slate-800">
+                              แบบประเมิน 5 มิติฝ่ายขาย (Sales Evaluation 1-5 ดาว):
+                            </h5>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                              {[
+                                { key: 'communication', label: '1. การสื่อสาร' },
+                                { key: 'punctuality', label: '2. ตรงต่อเวลา' },
+                                { key: 'quality', label: '3. คุณภาพงาน' },
+                                { key: 'problemSolving', label: '4. แก้ปัญหา' },
+                                { key: 'overall', label: '5. ภาพรวม' },
+                              ].map(dim => (
+                                <div key={dim.key} className="flex items-center justify-between p-2 rounded bg-white border border-slate-200">
+                                  <span className="font-semibold text-slate-700">{dim.label}:</span>
+                                  <div className="flex gap-1">
+                                    {[1, 2, 3, 4, 5].map(star => (
+                                      <button
+                                        type="button"
+                                        key={star}
+                                        onClick={() => setSalesEval(prev => ({ ...prev, [dim.key]: star }))}
+                                        className={`text-sm ${
+                                          (salesEval as any)[dim.key] >= star ? 'text-amber-400' : 'text-slate-300'
+                                        }`}
+                                      >
+                                        ★
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+
+                            <div>
+                              <div className="flex items-center justify-between text-xs mb-1">
+                                <label className="font-bold text-slate-700">กล่องอธิบายเพิ่มเติม (จำกัด 200 ตัวอักษร):</label>
+                                <span className="text-[10px] text-slate-400">{salesEval.description.length}/200</span>
+                              </div>
+                              <textarea
+                                rows={2}
+                                maxLength={200}
+                                placeholder="ระบุข้อคิดเห็นฝ่ายขายต่อการปฏิบัติงานของวิศวกร"
+                                value={salesEval.description}
+                                onChange={e => {
+                                  if (e.target.value.length <= 200) {
+                                    setSalesEval(prev => ({ ...prev, description: e.target.value }));
+                                  }
+                                }}
+                                className="w-full text-xs p-2 rounded-lg border border-slate-300 resize-none bg-white"
+                              />
+                            </div>
+
+                            <SignaturePad
+                              signerName={req.salesOwner}
+                              roleLabel="SALE (ปิดงานสมบูรณ์)"
+                              onSave={url => setTempSignatureUrl(url)}
+                            />
+
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => handleFinalClose(req)}
+                                className="flex-1 py-2 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow cursor-pointer"
+                              >
+                                บันทึกประเมิน & ลงนามดิจิทัลปิดงานสมบูรณ์
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setEvaluatingRequestId(null);
+                                  setTempSignatureUrl('');
+                                }}
+                                className="px-3 py-2 rounded-lg text-xs font-bold bg-slate-200 text-slate-700 cursor-pointer"
+                              >
+                                ยกเลิก
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => setEvaluatingRequestId(req.id)}
+                            className="w-full py-2.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm transition flex items-center justify-center gap-1.5 cursor-pointer"
+                          >
+                            <Star className="w-3.5 h-3.5 text-amber-300" />
+                            <span>ประเมิน 5 มิติฝ่ายขาย & เซ็นดิจิทัลปิดงานสมบูรณ์</span>
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* 9. กล่องสอบถามงาน Engineer (Inquiry System - 300 char) */}
+      {/* ======================================================== */}
+      {(activeHubTab === 'all' || activeHubTab === 'inquiries') && (
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
         <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between">
           <div className="flex items-center space-x-3">
@@ -1592,6 +2211,7 @@ export const SalesHub: React.FC<SalesHubProps> = ({
 
         </div>
       </div>
+      )}
 
       {/* Photo Zoom Lightbox Modal */}
       {activeZoomPhoto && (
