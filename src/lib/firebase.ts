@@ -21,7 +21,7 @@ import {
   User 
 } from 'firebase/auth';
 import firebaseConfig from '../../firebase-applet-config.json';
-import { EEngineerRequest, StaffMember, EngineerInquiry, EngineerDailyAttendance } from '../types';
+import { EEngineerRequest, StaffMember, EngineerInquiry, EngineerDailyAttendance, FaqItem } from '../types';
 
 // Initialize Firebase App
 export const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
@@ -130,6 +130,7 @@ export const COLLECTIONS = {
   STAFF: 'staff',
   INQUIRIES: 'inquiries',
   ATTENDANCE: 'daily_attendance',
+  FAQS: 'faqs',
   USERS: 'users',
 };
 
@@ -220,6 +221,39 @@ export const deleteStaffFromFirestore = async (id: string) => {
   const path = `${COLLECTIONS.STAFF}/${id}`;
   try {
     const docRef = doc(db, COLLECTIONS.STAFF, id);
+    await deleteDoc(docRef);
+  } catch (err) {
+    handleFirestoreError(err, OperationType.DELETE, path);
+  }
+};
+
+export const syncFaqToFirestore = async (faq: FaqItem) => {
+  const path = `${COLLECTIONS.FAQS}/${faq.id}`;
+  try {
+    const docRef = doc(db, COLLECTIONS.FAQS, faq.id);
+    await setDoc(docRef, faq, { merge: true });
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, path);
+  }
+};
+
+export const syncAllFaqsToFirestore = async (faqs: FaqItem[]) => {
+  try {
+    const batch = writeBatch(db);
+    faqs.forEach(f => {
+      const docRef = doc(db, COLLECTIONS.FAQS, f.id);
+      batch.set(docRef, f, { merge: true });
+    });
+    await batch.commit();
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, COLLECTIONS.FAQS);
+  }
+};
+
+export const deleteFaqFromFirestore = async (id: string) => {
+  const path = `${COLLECTIONS.FAQS}/${id}`;
+  try {
+    const docRef = doc(db, COLLECTIONS.FAQS, id);
     await deleteDoc(docRef);
   } catch (err) {
     handleFirestoreError(err, OperationType.DELETE, path);

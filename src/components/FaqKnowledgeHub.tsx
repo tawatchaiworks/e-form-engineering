@@ -4,303 +4,107 @@ import {
   CheckCircle2, ChevronDown, ChevronUp, AlertTriangle, 
   Lightbulb, Phone, Mail, Sparkles, Sliders,
   MessageSquare, Send, ThumbsUp, Tag, Scissors,
-  Waves, Trees, Cable, Cpu
+  Waves, Trees, Cable, Cpu, Plus, Edit3, Trash2,
+  Calculator, Check, X, ArrowRight, Share2, Copy,
+  UserCheck, Clock, ShieldCheck
 } from 'lucide-react';
+import { FaqItem, FaqCategory, EngineerInquiry, StaffMember } from '../types';
+import { INITIAL_FAQS } from '../utils/initialFaqs';
 
-interface FaqItem {
-  id: string;
-  category: 'switching_power' | 'dimming_driver' | 'cable_sizing' | 'strip_neonflex' | 'underwater' | 'garden_landscape' | 'dali_control';
-  categoryLabel: string;
-  question: string;
-  summary: string;
-  steps?: string[];
-  technicalTips?: string;
-  commonCauses?: string[];
-  specsTable?: { label: string; value: string }[];
-  tags: string[];
+interface FaqKnowledgeHubProps {
+  faqs?: FaqItem[];
+  inquiries?: EngineerInquiry[];
+  staff?: StaffMember[];
+  onAddFaq?: (faq: FaqItem) => void;
+  onUpdateFaq?: (faq: FaqItem) => void;
+  onDeleteFaq?: (faqId: string) => void;
+  onSendInquiry?: (inquiry: Omit<EngineerInquiry, 'id' | 'createdAt' | 'status'>) => void;
+  onReplyInquiry?: (inquiryId: string, replyMessage: string, signatureUrl: string) => void;
+  onPromoteInquiryToFaq?: (inquiry: EngineerInquiry, faqPayload: Partial<FaqItem>) => void;
 }
 
-const FAQ_DATA: FaqItem[] = [
-  // 1. การเลือกหม้อแปลง Switching (12V / 24V Power Supply)
-  {
-    id: 'faq-psu-1',
-    category: 'switching_power',
-    categoryLabel: 'การเลือกหม้อแปลง Switching',
-    question: 'การคำนวณเลือกขนาดวัตต์ (Wattage) ของหม้อแปลง Switching 12V/24V มีหลักการอย่างไร?',
-    summary: 'การเลือกหม้อแปลงสวิตชิ่งต้องคำนวณโหลดรวมของไฟ LED และเผื่อค่า Safety Margin (Derating Factor 80% Rule) เสมอ:',
-    steps: [
-      '1. รวมกำลังวัตต์ทั้งหมด: (ความยาวไฟเส้นรวมเป็นเมตร) x (วัตต์ต่อเมตรของ LED Strip) เช่น 15 เมตร x 10W/m = 150 Watts',
-      '2. คำนวณค่าเผื่อ Safety Margin 20-30%: นำวัตต์รวม ÷ 0.80 เช่น 150W ÷ 0.80 = 187.5 Watts',
-      '3. เลือกขนาดหม้อแปลงมาตรฐานในท้องตลาดที่มีขนาดเท่ากับหรือมากกว่า เช่น เลือกหม้อแปลงขนาด 200W หรือ 240W 24VDC',
-      '4. ตรวจสอบกระแสเอาต์พุต (Current): กระแสรวม (A) = กำลังวัตต์หม้อแปลง ÷ แรงดัน (24V) เช่น 200W / 24V = 8.33A'
-    ],
-    technicalTips: 'ห้ามโหลดหม้อแปลงเกิน 80% ต่อเนื่องเป็นเวลานาน เพราะความร้อนสะสมจะทำให้ชิ้นส่วน Capacitors เสื่อมสภาพเร็วและหม้อแปลงตัดการทำงาน (Over Temperature Protection)',
-    tags: ['หม้อแปลง Switching', 'Power Supply', 'Derating 80%', 'คำนวณวัตต์', '24VDC', '12VDC']
-  },
-  {
-    id: 'faq-psu-2',
-    category: 'switching_power',
-    categoryLabel: 'การเลือกหม้อแปลง Switching',
-    question: 'ความแตกต่างระหว่างหม้อแปลง Indoor (IP20) และ Outdoor (IP67) และการเลือกใช้งาน?',
-    summary: 'หม้อแปลงสวิตชิ่งแบ่งตามเกรดการป้องกันสภาพแวดล้อมและการระบายความร้อน:',
-    steps: [
-      '1. หม้อแปลง Indoor (IP20 แบบตะแกรงรังผึ้ง / Slim Aluminum): สำหรับติดตั้งในฝ้าเพดาน ตู้คอนโทรล หรือจุดแห้ง มีช่องระบายอากาศ ต้องมีพื้นที่ให้อากาศถ่ายเทสะดวก',
-      '2. หม้อแปลง Outdoor (IP67 แบบหล่อซิลิโคน/อลูมิเนียมปิดผนึก): สำหรับงานภายนอกอาคาร สวน ป้ายไฟ ทนฝนและไอความชื้น ไม่ต้องกังวลเรื่องละอองน้ำหรือจิ้งจก/แมลงเข้าไปลัดวงจร',
-      '3. ข้อควรระวังในการติดตั้งในฝ้า: แม้เป็นหม้อแปลง Indoor ควรเว้นระยะห่างรอบตัวอย่างน้อย 10-15 ซม. ห้ามนำฉนวนกันความร้อนมาทับตัวหม้อแปลงโดยเด็ดขาด'
-    ],
-    technicalTips: 'หากติดตั้งหม้อแปลง IP67 ภายนอกอาคาร ควรติดตั้งในที่ร่มหรือมีแผงกันแดดส่องตรง (Sunshade) เพื่อป้องกันความร้อนจากแสงแดดสะสม',
-    tags: ['IP20', 'IP67', 'Indoor vs Outdoor', 'การระบายความร้อน', 'ฝ้าเพดาน']
-  },
-  {
-    id: 'faq-psu-3',
-    category: 'switching_power',
-    categoryLabel: 'การเลือกหม้อแปลง Switching',
-    question: 'กระแสกระชากขณะเปิด (Inrush Current) คืออะไร และทำไมเปิดไฟพร้อมกันแล้วเบรกเกอร์ทริป?',
-    summary: 'ขณะเริ่มจ่ายไฟเข้าหม้อแปลง สวิตชิ่งจะดึงกระแสสูงกว่าปกติ 20-50 เท่าในช่วงเสี้ยววินาทีเพื่อประจุไฟเข้าตัวเก็บประจุ:',
-    commonCauses: [
-      'ติดตั้งหม้อแปลงสวิตชิ่งจำนวนหลายตัวบนวงจรเบรกเกอร์ MCB ลูกเดียวกัน',
-      'ใช้เบรกเกอร์ Type B ซึ่งตัดไวเกินไปต่อกระแสกระชากชั่วขณะ',
-      'ไม่ได้ใส่ Magnetic Contactor หรือ Inrush Current Limiter (ICL) ในตู้คอนโทรล'
-    ],
-    steps: [
-      '1. เปลี่ยนเบรกเกอร์ MCB เป็น Type C หรือ Type D ซึ่งทนกระแส Inrush ได้ 5-10 เท่าของพิกัด',
-      '2. กระจายหม้อแปลงออกเป็นหลายวงจรย่อย หรือติดตั้งอุปกรณ์ Soft-starter / NTC Inrush Limiter',
-      '3. ตั้งเวลาเปิดไฟแบบหน่วงเวลา (Sequential Switching / Time Delay Relay) ให้เปิดทีละกลุ่ม'
-    ],
-    technicalTips: 'เบรกเกอร์ 16A Type C แนะนำให้คุมหม้อแปลงสวิตชิ่งขนาด 200W รวมกันไม่เกิน 4-5 ตัวต่อหนึ่งวงจร',
-    tags: ['Inrush Current', 'เบรกเกอร์ทริป', 'MCB Type C', 'กระแสกระชาก', 'ตู้ไฟ']
-  },
+const CATEGORY_META: Record<FaqCategory, { label: string; icon: any }> = {
+  switching_power: { label: 'การเลือกหม้อแปลง Switching', icon: Zap },
+  dimming_driver: { label: 'การเลือกหม้อแปลงดิม (Dimmable)', icon: Sliders },
+  cable_sizing: { label: 'สายไฟ 24V & ระยะสาย', icon: Cable },
+  strip_neonflex: { label: 'ตัดต่อ Strip & Neon Flex', icon: Scissors },
+  underwater: { label: 'โคมใต้น้ำ & สายใต้น้ำ', icon: Waves },
+  garden_landscape: { label: 'โคมในสวน & ข้อจำกัด', icon: Trees },
+  dali_control: { label: 'ระบบ DALI & Control', icon: Cpu },
+  troubleshooting: { label: 'แก้ปัญหาและอาการเสียหน้างาน', icon: AlertTriangle },
+  general: { label: 'ความรู้เทคนิคไฟฟ้าทั่วไป', icon: BookOpen },
+};
 
-  // 2. การเลือกหม้อแปลงดิม (Dimmable Drivers)
-  {
-    id: 'faq-dim-1',
-    category: 'dimming_driver',
-    categoryLabel: 'การเลือกหม้อแปลงดิม (Dimming Drivers)',
-    question: 'เปรียบเทียบระบบหม้อแปลงดิม (DALI-2, 0-10V, Triac Phase-Cut, Push-Dim) เลือกแบบไหนดี?',
-    summary: 'การเลือกหม้อแปลงดิมขึ้นอยู่กับระบบควบคุมหลักของอาคารและพฤติกรรมการใช้งาน:',
-    steps: [
-      '1. DALI-2 (DT6 / DT8): เหมาะกับงานโครงการ อาคารสำนักงาน โรงแรมหรู ที่ต้องการระบบ Automation ตั้ง Scene จัดกลุ่มได้อิสระ รองรับการดิมที่นุ่มนวลระดับ 0.1% - 1% และปรับอุณหภูมิแสง Tunable White',
-      '2. 0-10V / 1-10V (Analog): เหมาะกับระบบ Dimmer แบบหมุนทั่วไป หรือระบบ BMS ขนาดกลาง เดินสายสัญญาณ 2 เส้นแยกจากสายเมน',
-      '3. Triac / Phase-Cut (AC Mains Dimming): เหมาะกับงานรีโนเวทที่ไม่ต้องการเดินสายสัญญาณเพิ่ม ใช้สายไฟ 220V เดิมต่อผ่านสวิตช์ดิมเมอร์ Triac (แนะนำ Trailing-edge/ELV)',
-      '4. Push-Dim (Switch-Dim): ควบคุมด้วยสวิตช์กระดิ่งกดติด-ปล่อยดับ (Retractive Switch) สะดวกสำหรับห้องเดี่ยว กดสั้นเปิด/ปิด กดยาวหรี่/เพิ่มแสง'
-    ],
-    technicalTips: 'หากต้องการความนุ่มนวลสูงสุด ไม่กระตุก และหรี่ได้ลึกระดับ 0.1% แนะนำระบบ DALI-2 Driver แบบ Amplitude Dimming ผสม High-frequency PWM',
-    tags: ['DALI-2', '0-10V', 'Triac Phase Cut', 'Push Dim', 'ระบบดิมไฟ']
-  },
-  {
-    id: 'faq-dim-2',
-    category: 'dimming_driver',
-    categoryLabel: 'การเลือกหม้อแปลงดิม (Dimming Drivers)',
-    question: 'PWM Dimming กับ Amplitude Modulation (CC Dimming) ต่างกันอย่างไร และแบบไหนไม่กะพริบเวลามองผ่านกล้อง?',
-    summary: 'เทคนิคการหรี่แสงของ LED Driver ส่งผลโดยตรงต่อคุณภาพแสงและอาการ Flicker:',
-    steps: [
-      '1. PWM Dimming (Pulse Width Modulation): ดิมโดยการตัดต่อแรงดันไฟด้วยความถี่สูง หากความถี่ต่ำ (<1kHz) จะเห็นไฟกะพริบชัดเจนเมื่อถ่ายภาพ/วิดีโอด้วยสมาร์ตโฟน และอาจมีเสียงหวีด (Acoustic Noise)',
-      '2. Amplitude Modulation (AM / Linear Reduction): ดิมโดยการลดขนาดกระแส/แรงดันลงโดยตรง แสงจะนิ่งสนิท 100% ไม่มีคลื่นกะพริบ (Flicker-Free) เหมาะกับสตูดิโอและบ้านพักอาศัยระดับพรีเมียม',
-      '3. Hybrid Dimming: ใช้ AM ในช่วง 100% ลงมาถึง 10-20% แล้วสลับเป็น High-frequency PWM (>3kHz) ในช่วงแสงต่ำมากเพื่อความแม่นยำของสี'
-    ],
-    technicalTips: 'เลือกรุ่น Driver ที่ผ่านเกณฑ์ IEEE 1789 (Flicker-Free Standard) เพื่อความสบายตาและไม่เกิดอาการปวดหัวจากการจ้องแสงนานๆ',
-    tags: ['PWM', 'Amplitude Dimming', 'Flicker Free', 'ถ่ายคลิปไฟกะพริบ', 'IEEE 1789']
-  },
+export const FaqKnowledgeHub: React.FC<FaqKnowledgeHubProps> = ({
+  faqs = [],
+  inquiries = [],
+  staff = [],
+  onAddFaq,
+  onUpdateFaq,
+  onDeleteFaq,
+  onSendInquiry,
+  onReplyInquiry,
+  onPromoteInquiryToFaq,
+}) => {
+  // Merge prop FAQs or fallback to INITIAL_FAQS
+  const displayFaqs = faqs.length > 0 ? faqs : INITIAL_FAQS;
 
-  // 3. การเลือกสายไฟ 24V และระยะสาย
-  {
-    id: 'faq-cable-1',
-    category: 'cable_sizing',
-    categoryLabel: 'การเลือกสายไฟ 24V และระยะสาย',
-    question: 'การคำนวณแรงดันตก (Voltage Drop) และตารางเลือกขนาดสายไฟ 24VDC ตามระยะทาง?',
-    summary: 'ระบบแรงดันต่ำ 24VDC ไวต่อแรงดันตกในสายมาก แรงดันปลายสายไม่ควรต่ำกว่า 22.0VDC (Drop < 8%):',
-    steps: [
-      '1. โหลด 50W (กระแส ~2.1A): ระยะ 0-10m ใช้สาย 1.5 sq.mm., ระยะ 10-25m ใช้สาย 2.5 sq.mm., ระยะ 25-40m ใช้สาย 4.0 sq.mm.',
-      '2. โหลด 100W (กระแส ~4.2A): ระยะ 0-10m ใช้สาย 2.5 sq.mm., ระยะ 10-20m ใช้สาย 4.0 sq.mm., ระยะ 20-30m ใช้สาย 6.0 sq.mm.',
-      '3. โหลด 150W-200W (กระแส ~6-8A): ระยะ 0-8m ใช้สาย 4.0 sq.mm., ระยะ >10m แนะนำแยกหม้อแปลงไปไว้ใกล้จุดโคมไฟแทนการเดินสาย 24V ไกลๆ',
-      '4. สัญลักษณ์สีสายไฟ DC มาตรฐาน: สายบวก (+) สีแดง หรือ สีน้ำตาล, สายลบ (-) สีดำ หรือ สีน้ำเงิน'
-    ],
-    technicalTips: 'สูตรคิดแรงดันตก: V_drop = (2 x ความยาวสาย(เมตร) x กระแสไฟ(A) x 0.0175) / ขนาดสายไฟ(sq.mm.)',
-    tags: ['24VDC Cable', 'Voltage Drop', 'ขนาดสายไฟ', 'ระยะสายไฟ', 'แรงดันตก']
-  },
-  {
-    id: 'faq-cable-2',
-    category: 'cable_sizing',
-    categoryLabel: 'การเลือกสายไฟ 24V และระยะสาย',
-    question: 'ควรวางหม้อแปลงรวมที่ตู้ไฟกลาง (Centralized) หรือกระจายไว้ใกล้หน้างาน (Distributed)?',
-    summary: 'ข้อดี-ข้อเสียในการวางตำแหน่งหม้อแปลงสวิตชิ่ง 24V ในงานระบบแสงสว่าง:',
-    steps: [
-      '1. วางรวมที่ตู้ไฟ (Centralized): ดูแลรักษาง่าย เปลี่ยนหม้อแปลงสะดวก แต่มีข้อจำกัดเรื่องระยะสาย 24V ยิ่งไกลต้องใช้สายเมนเบอร์ใหญ่มาก (4-6 sq.mm.) เพื่อคุม Voltage drop',
-      '2. กระจายตามฝ้าเพดาน (Distributed): เดินสายไฟ 220V ไปหาหม้อแปลงใกล้จุดติดตั้งไฟ (ระยะ 24V ไม่เกิน 3-5 เมตร) ช่วยประหยัดค่าสายไฟ แต่ต้องทำช่องเซอร์วิส (Service Access) ให้เปิดซ่อมได้',
-      '3. กฎทอง: ระยะสาย 24VDC จากหม้อแปลงถึงจุดจ่ายไฟเส้นแรก ควรคุมให้อยู่ภายใน 5-10 เมตรเสมอ'
-    ],
-    technicalTips: 'หากจำเป็นต้องวางหม้อแปลงไกลกว่า 20 เมตร ให้ปรับแรงดันเอาต์พุตที่ปุ่มหมุน V.ADJ บนหม้อแปลงขึ้นเป็น 25.5V - 26V เพื่อชดเชยแรงดันตกปลายทาง',
-    tags: ['Centralized vs Distributed', 'ตู้คอนโทรล', 'ช่องเซอร์วิส', 'V.ADJ']
-  },
-
-  // 4. การตัดต่อ LED Strip & Neon Flex
-  {
-    id: 'faq-strip-1',
-    category: 'strip_neonflex',
-    categoryLabel: 'การตัดต่อ LED Strip & Neon Flex',
-    question: 'การตัดต่อไฟเส้น LED Strip ที่ถูกต้อง และการต่อไฟเลี้ยงป้องกันปลายสายแสงดรอป?',
-    summary: 'ข้อปฏิบัติในการตัด ต่อ และจ่ายไฟให้ไฟเส้น LED Strip 24V:',
-    steps: [
-      '1. จุดตัด (Cut Marks): ต้องตัดเฉพาะตรงเส้นประที่มีสัญลักษณ์รูปกรรไกรหรือจุดบัดกรีทองแดง (Copper Pads) เท่านั้น ห้ามตัดกึ่งกลางเม็ด LED',
-      '2. การเชื่อมต่อสาย: แนะนำการบัดกรีด้วยหัวแร้งความร้อนพอเหมาะ (300-350°C ไม่เกิน 3 วินาทีต่อจุด) และหุ้มท่อหดกาว จะแข็งแรงและนำกระแสได้ดีกว่าตัวหนีบคลิปพลาสติก',
-      '3. การจ่ายไฟ (Power Feeding): ไฟเส้นยาวเกิน 5 เมตร ห้ามจ่ายไฟด้านเดียว ให้จ่ายไฟแบบหัว-ท้าย (Double-End Feed) หรือเดินสายเมนคู่ขนานจ่ายทุกๆ 5 เมตร',
-      '4. รางระบายความร้อน: ไฟเส้นกำลังวัตต์ >9.6W/m ต้องแปะลงบนรางอลูมิเนียมโพรไฟล์ (Aluminum Profile) เสมอเพื่อระบายความร้อน ไม่ให้กาว 3M เสื่อมและ LED หมอง'
-    ],
-    technicalTips: 'ทำความสะอาดพื้นผิวรางอลูมิเนียมด้วยแอลกอฮอล์ไอโซโพรพิล (IPA) ให้ปราศจากฝุ่นและคราบน้ำมันก่อนลอกแถบกาว 3M แปะไฟเส้น',
-    tags: ['LED Strip', 'การตัดต่อไฟเส้น', 'Double End Feed', 'รางอลูมิเนียม', 'การบัดกรี']
-  },
-  {
-    id: 'faq-strip-2',
-    category: 'strip_neonflex',
-    categoryLabel: 'การตัดต่อ LED Strip & Neon Flex',
-    question: 'การตัดต่อ Neon Flex ซิลิโคน การซีลหัว-ท้าย และข้อควรระวังเรื่องรัศมีการดัดโค้ง?',
-    summary: 'LED Neon Flex ต้องระมัดระวังเรื่องการกันน้ำและทิศทางการดัดงอ:',
-    steps: [
-      '1. การตัด: สังเกตจุดตัดสีดำ (Black Mark) ใต้ตัว Neon Flex ตัดให้หน้าตัดเรียบตรง 90 องศาด้วยคัตเตอร์คมพิเศษ',
-      '2. การซีลกันน้ำ IP67/IP68: ใส่ End Cap ซิลิโคนพร้อมหยอดกาวซิลิโคน RTV ชนิดไม่มีกรด (Neutral Cure Silicone) ให้มิดชิด ทิ้งไว้ให้แห้งสนิท 24 ชม. ก่อนโดนน้ำ',
-      '3. ทิศทางการดัดงอ: ตรวจสอบว่าเป็นชนิด Side-Bend (ดัดด้านข้าง) หรือ Top-Bend (ดัดบน-ล่าง) ห้ามบิดงอผิดทิศทางเด็ดขาด',
-      '4. รัศมีการดัดโค้งต่ำสุด (Minimum Bend Radius): โดยทั่วไปไม่น้อยกว่า 50-80 มม. ห้ามพับหักมุม 90 องศาแบบเฉียบพลันเพราะลายวงจร PCB ภายในจะขาด'
-    ],
-    technicalTips: 'ห้ามดึงหรือกระชากสายไฟที่ต่อออกจากหัว Neon Flex เพราะจะทำให้จุดบัดกรีภายในหลุดและซิลิโคนฉีกขาดสูญเสียคุณสมบัติกันน้ำ',
-    tags: ['Neon Flex', 'การตัดต่อ', 'End Cap', 'กาวซิลิโคน', 'Bend Radius', 'Side Bend']
-  },
-
-  // 5. การติดตั้งโคมใต้น้ำ & การต่อสายไฟใต้น้ำ (IP68)
-  {
-    id: 'faq-underwater-1',
-    category: 'underwater',
-    categoryLabel: 'โคมใต้น้ำ & การต่อสายใต้น้ำ',
-    question: 'มาตรฐานความปลอดภัยและการติดตั้งโคมไฟใต้น้ำ (Underwater Light IP68)?',
-    summary: 'ข้อกำหนดทางวิศวกรรมสำหรับโคมไฟสระว่ายน้ำ น้ำพุ และบ่อปลา:',
-    steps: [
-      '1. ระบบแรงดันไฟฟ้าปลอดภัยพิเศษ (SELV): ต้องใช้ไฟแรงดันต่ำ 12VAC, 12VDC หรือ 24VDC เท่านั้น **ห้ามใช้ไฟ 220VAC ใต้น้ำเด็ดขาด**',
-      '2. ตำแหน่งติดตั้งหม้อแปลง: ต้องอยู่นอกบ่อน้ำในจุดแห้ง ห่างจากขอบสระอย่างน้อย 2.0-3.5 เมตร และสูงกว่าระดับน้ำสูงสุด',
-      '3. วัสดุตัวเรือน: สระว่ายน้ำระบบเกลือ/คลอรีน ต้องใช้สแตนเลสเกรด 316 / 316L เท่านั้น (ห้ามใช้ SS304 เพราะจะเกิดสนิมกัดกร่อน)',
-      '4. กฎการระบายความร้อนด้วยน้ำ: โคมใต้น้ำถูกออกแบบให้ใช้น้ำระบายความร้อน **ห้ามเปิดทดสอบโคมแห้งบนบกเกิน 1 นาที** เพราะหน้าเลนส์และเม็ด LED จะไหม้ทันที'
-    ],
-    technicalTips: 'ควรเผื่อความยาวสายไฟม้วนซ่อนไว้หลังกระบอกโคม (Niche) ประมาณ 1.5 เมตร เพื่อให้สามารถดึงตัวโคมขึ้นมาเปลี่ยนบนขอบสระได้โดยไม่ต้องถ่ายน้ำออก',
-    tags: ['โคมใต้น้ำ', 'Underwater Light', 'IP68', 'SELV 12V/24V', 'Stainless 316', 'สระว่ายน้ำ']
-  },
-  {
-    id: 'faq-underwater-2',
-    category: 'underwater',
-    categoryLabel: 'โคมใต้น้ำ & การต่อสายใต้น้ำ',
-    question: 'การต่อสายไฟใต้น้ำอย่างไรไม่ให้น้ำซึมเข้า และข้อห้ามสำคัญ?',
-    summary: 'การต่อเชื่อมสายไฟใต้น้ำเป็นจุดเสี่ยงสูงสุด ต้องทำตามมาตรฐาน IP68 อย่างเคร่งครัด:',
-    steps: [
-      '1. แนวทางปฏิบัติที่ดีที่สุด: ดึงสายไฟเดิมของโคม (Submersible Cable H07RN-F) ตรงเข้าท่อขึ้นไปต่อใน Junction Box เหนือน้ำ โดยไม่มีจุดต่อใต้น้ำ',
-      '2. หากจำเป็นต้องต่อสายใต้น้ำ (วิธี Resin Cast): ใช้กล่องต่อสายเรซิน (Resin Gel Joint Box IP68) เทน้ำยา Polyurethane Resin ผสม 2 ส่วน หล่อปิดทึบ 100%',
-      '3. การใช้ท่อหดกาว + เทปละลาย: พันด้วยเทปละลายกันน้ำ (Self-Amalgamating Tape) ดึงยืด 50% ซ้อนทับ 3 ชั้น แล้วหุ้มด้วยท่อหดมีกาวร้อน (Adhesive Dual-Wall Heat Shrink) ทับอีก 2 ชั้น',
-      '4. ข้อห้ามเด็ดขาด: ห้ามใช้เทปพันสายไฟธรรมดา หรือเทปพันเกลียวท่อประปาในการต่อสายไฟใต้น้ำเด็ดขาด เพราะน้ำจะซึมผ่านเส้นทองแดง (Capillary Effect) เข้าสู่ตัวโคม'
-    ],
-    technicalTips: 'ใช้สายเคเบิลเปลือกยางชนิดพิเศษสำหรับงานใต้น้ำ เช่น สาย H07RN-F หรือ Submersible Rubber Cable เพื่อป้องกันการเปื่อยยุ่ยจากคลอรีน',
-    tags: ['ต่อสายไฟใต้น้ำ', 'Resin Box IP68', 'เทปละลาย', 'ท่อหดกาว', 'Capillary Action']
-  },
-
-  // 6. การติดตั้งโคมในสวน & ข้อจำกัดต่างๆ (Garden & Landscape)
-  {
-    id: 'faq-garden-1',
-    category: 'garden_landscape',
-    categoryLabel: 'การติดตั้งโคมในสวน & ข้อจำกัด',
-    question: 'การติดตั้งโคมไฟฝังพื้นในสวน (Inground Up-Light IP67) และการทำชั้นระบายน้ำป้องกันน้ำท่วมขัง?',
-    summary: 'โคมฝังพื้นมักชำรุดจากปัญหาน้ำขังใต้ดินและการเกิดฝ้าไอน้ำสะสม:',
-    steps: [
-      '1. การขุดหลุมและชั้นหินกรวด (Gravel Base): ใต้กระบอกฝังพื้น (Mounting Sleeve) ต้องขุดลึกเพิ่ม 20-30 ซม. แล้วเทหินกรวดเบอร์ 1-2 เพื่อเป็นโพรงให้น้ำระบายซึมลงดินได้อย่างรวดเร็ว',
-      '2. ข้อห้าม: ห้ามเทคอนกรีตปิดก้นกระบอกโคม เพราะน้ำฝนจะขังอยู่ในกระบอกกลายเป็นบ่อแช่โคม',
-      '3. จุดติดตั้ง: หลีกเลี่ยงการวางโคมฝังพื้นในจุดที่เป็นแอ่งรับน้ำต่ำสุดของสนามหญ้า หรือจุดที่มีสปริงเกลอร์รดน้ำฉีดอัดตรง',
-      '4. การขันน็อตหน้ากระจก: ต้องขันสลับแบบกากบาท (Cross-Pattern) ด้วยแรงขันที่สม่ำเสมอ เพื่อให้ยางซิลิโคน O-Ring แนบสนิททุกมุม'
-    ],
-    technicalTips: 'หากเกิดฝ้าไอน้ำในโคมตอนเปิดใช้งาน ให้เปิดฝาหน้าโคมทิ้งไว้ 30 นาทีในวันที่อากาศแห้ง เพื่อไล่ความชื้นที่สะสมออกแล้วจึงปิดผนึกใหม่อีกครั้ง',
-    tags: ['โคมฝังพื้น', 'Inground Light', 'IP67', 'ชั้นหินกรวดระบายน้ำ', 'ฝ้าไอน้ำ', 'O-Ring']
-  },
-  {
-    id: 'faq-garden-2',
-    category: 'garden_landscape',
-    categoryLabel: 'การติดตั้งโคมในสวน & ข้อจำกัด',
-    question: 'การเดินสายไฟฝังดินในสวน และการป้องกันหนู/แมลง/ความชื้นกัดแทะสาย?',
-    summary: 'มาตรฐานการเดินท่อร้อยสายไฟใต้ดินในงาน Landscape:',
-    steps: [
-      '1. ชนิดท่อร้อยสาย: ต้องใช้ท่อร้อยสายไฟ HDPE (High-Density Polyethylene คาดส้ม) หรือท่อเหล็กชุบสังกะสีหนา (RSC / IMC) ห้ามใช้ท่อ PVC สีขาว/เหลืองแบบบางฝังดินโดยตรง',
-      '2. ความลึกในการฝังท่อ: ฝังลึกใต้ระดับดินเดิมอย่างน้อย 30 - 50 ซม. และกลบด้วยชั้นทรายก่อนปิดด้วยดินเดิม',
-      '3. กล่องพักสายในสวน (Junction Box): ต้องใช้กล่องกันน้ำ IP68 พร้อมใส่เคเบิ้ลแกลนด์ (Cable Gland) ขันบีบแน่นทุกช่องทางเข้าสาย และอุดซิลิโคนป้องกันมด/แมลงเข้าไปทำรัง',
-      '4. สายไฟ: ใช้สายไฟชนิดฝังดินโดยเฉพาะ เช่น สาย NYY หรือสาย XLPE'
-    ],
-    technicalTips: 'ใส่เทปเตือนภัยใต้ดิน (Underground Warning Tape) เหนือแนวท่อประมาณ 15 ซม. เพื่อเตือนคนทำสวนเวลาขุดดินไม่ให้โดนท่อไฟฟ้า',
-    tags: ['สายไฟฝังดิน', 'ท่อ HDPE', 'Cable Gland', 'สาย NYY', 'ไฟในสวน', 'จัดสวน']
-  },
-
-  // 7. ระบบ DALI & Automation
-  {
-    id: 'faq-dali-1',
-    category: 'dali_control',
-    categoryLabel: 'ระบบ DALI & Automation',
-    question: 'DALI Short Address, Group และ Broadcast ต่างกันอย่างไร และใช้อย่างไร?',
-    summary: 'DALI-2 รองรับการควบคุมได้ 3 รูปแบบหลักตามโครงสร้างการตั้งค่าของระบบแสงสว่าง:',
-    steps: [
-      '1. Short Address: ควบคุมทีละตัวเดี่ยวๆ (1 Loop สูงสุด 64 Address คือ 0-63) เหมาะกับการตั้งค่าเฉพาะโคม',
-      '2. Group Address: ควบคุมเป็นกลุ่ม (1 Loop สูงสุด 16 Groups คือ Group 0-15) โดยโคม 1 ตัวอยู่ได้หลายกลุ่ม',
-      '3. Broadcast: สั่งงานทุกโคมในลูปพร้อมกันโดยไม่จำเป็นต้อง Addressing เหมาะกับการทดสอบหน้างานเบื้องต้น'
-    ],
-    technicalTips: 'หากต้องการสั่งงานฉุกเฉิน เช่น ไฟติด 100% ทั้งหมดทันที ให้ส่งคำสั่งแบบ Broadcast Command',
-    tags: ['DALI', 'Addressing', 'Group Control', 'Broadcast', 'Control System']
-  },
-  {
-    id: 'faq-dali-2',
-    category: 'dali_control',
-    categoryLabel: 'ระบบ DALI & Automation',
-    question: 'ข้อกำหนดสายสัญญาณ DALI (ระยะทาง, ขนาดสาย, และโครงสร้าง Topology)?',
-    summary: 'สายสัญญาณ DALI Bus เป็นระบบ 2-Wire ที่มีความยืดหยุ่นสูง ไม่มีขั้ว (Polarity-Free):',
-    steps: [
-      '1. ขนาดสาย: แนะนำใช้สาย NYY หรือ VCT 2x1.5 sq.mm. หรืออย่างน้อย 2x1.0 sq.mm.',
-      '2. ระยะทางสูงสุด: ไม่เกิน 300 เมตรต่อลูป (วัดจากจุดที่ไกลที่สุดถึง DALI Power Supply)',
-      '3. แรงดันตก (Voltage Drop): แรงดันไฟ DALI Bus ต้องไม่ต่ำกว่า 9.5V ณ โคมปลายสายสุด (ปกติ 16VDC ±2V)',
-      '4. Topology: สามารถเดินสายแบบ Daisy Chain (Bus), Tree (กิ่งก้าน), หรือ Star (ดาว) ได้อย่างอิสระ **ห้ามต่อเป็นวงปิด (Ring/Loop)**'
-    ],
-    technicalTips: 'สาย DALI สามารถเดินในรางร่วมกับสายไฟ 230VAC ได้ตามมาตรฐาน IEC 62386 เนื่องจากมีฉนวนระดับ Mains-rated Isolation',
-    tags: ['DALI Bus', 'Wiring', 'Topology', 'Voltage Drop', 'IEC 62386']
-  },
-  {
-    id: 'faq-dali-3',
-    category: 'dali_control',
-    categoryLabel: 'ระบบ DALI & Automation',
-    question: 'DALI Power Supply จ่ายกระแสเท่าไร และคำนวณจำนวนโคมต่อลูปอย่างไร?',
-    summary: 'มาตรฐาน DALI กำหนดกระแสไฟสูงสุดของระบบไม่เกิน 250mA:',
-    steps: [
-      '1. Driver DALI แต่ละตัวกินกระแสจาก Bus ประมาณ 2mA (64 Drivers = 128mA)',
-      '2. DALI Sensor / Switch panel แต่ละตัวกินกระแสประมาณ 5 - 10mA',
-      '3. รวมอุปกรณ์ทั้งหมดใน 1 Loop ต้องไม่เกินพิกัดของ DALI Power Supply (มาตรฐาน 240mA - 250mA)',
-      '4. ห้ามต่อ DALI Power Supply 2 ตัวขนานกันในลูปเดียวกัน เว้นแต่เป็นรุ่นที่ออกแบบรองรับ Multi-PSU'
-    ],
-    technicalTips: 'ใช้ DALI Bus Tester หรือ Multimeter วัดแรงดัน DC ระหว่างเส้น DA-DA ต้องอ่านได้ระหว่าง 14.5V - 17.5VDC',
-    tags: ['Power Supply', 'Current Limit', '250mA', 'Sensor', 'Bus Power']
-  }
-];
-
-export const FaqKnowledgeHub: React.FC = () => {
+  const [activeTab, setActiveTab] = useState<'faqs' | 'candidates' | 'calculators'>('faqs');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [expandedId, setExpandedId] = useState<string | null>('faq-psu-1');
+  const [expandedId, setExpandedId] = useState<string | null>(displayFaqs[0]?.id || 'faq-psu-1');
   const [helpfulVotes, setHelpfulVotes] = useState<Record<string, boolean>>({});
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  // Question submission state
+  // Add / Edit FAQ Modal state
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingFaq, setEditingFaq] = useState<FaqItem | null>(null);
+  const [faqCategory, setFaqCategory] = useState<FaqCategory>('switching_power');
+  const [faqQuestion, setFaqQuestion] = useState('');
+  const [faqSummary, setFaqSummary] = useState('');
+  const [faqStepsText, setFaqStepsText] = useState('');
+  const [faqTechnicalTips, setFaqTechnicalTips] = useState('');
+  const [faqCommonCausesText, setFaqCommonCausesText] = useState('');
+  const [faqTagsText, setFaqTagsText] = useState('');
+  const [faqAuthorName, setFaqAuthorName] = useState('ฝ่ายวิศวกรรม LUMENCRAFT');
+
+  // Ask Question Modal state
   const [showAskModal, setShowAskModal] = useState(false);
   const [newQuestion, setNewQuestion] = useState('');
-  const [newCategory, setNewCategory] = useState('switching_power');
+  const [newCategory, setNewCategory] = useState<FaqCategory>('switching_power');
   const [newDetail, setNewDetail] = useState('');
+  const [newSoNumber, setNewSoNumber] = useState('');
+  const [newProjectName, setNewProjectName] = useState('');
+  const [newSalesName, setNewSalesName] = useState('ฝ่ายขาย');
+  const [newEngineerName, setNewEngineerName] = useState('พัด');
   const [submitSuccess, setSubmitSuccess] = useState(false);
 
+  // Promoting Inquiries state
+  const [promotingInquiry, setPromotingInquiry] = useState<EngineerInquiry | null>(null);
+
+  // Interactive Calculator States
+  // 1. Switching Wattage Calculator
+  const [calcStripLength, setCalcStripLength] = useState<number>(15);
+  const [calcWattPerMeter, setCalcWattPerMeter] = useState<number>(14.4);
+  const [calcSafetyFactor, setCalcSafetyFactor] = useState<number>(0.8);
+
+  // 2. Voltage Drop Calculator (24VDC)
+  const [calcLoadWatts, setCalcLoadWatts] = useState<number>(100);
+  const [calcCableLength, setCalcCableLength] = useState<number>(15);
+  const [calcCableSize, setCalcCableSize] = useState<number>(2.5);
+
   const categories = [
-    { id: 'all', label: 'คำถามทั้งหมด (All FAQ)', icon: BookOpen, count: FAQ_DATA.length },
-    { id: 'switching_power', label: 'หม้อแปลง Switching', icon: Zap, count: FAQ_DATA.filter(f => f.category === 'switching_power').length },
-    { id: 'dimming_driver', label: 'หม้อแปลงดิม (Dimmable)', icon: Sliders, count: FAQ_DATA.filter(f => f.category === 'dimming_driver').length },
-    { id: 'cable_sizing', label: 'สายไฟ 24V & ระยะสาย', icon: Cable, count: FAQ_DATA.filter(f => f.category === 'cable_sizing').length },
-    { id: 'strip_neonflex', label: 'ตัดต่อ Strip & Neon Flex', icon: Scissors, count: FAQ_DATA.filter(f => f.category === 'strip_neonflex').length },
-    { id: 'underwater', label: 'โคมใต้น้ำ & สายใต้น้ำ', icon: Waves, count: FAQ_DATA.filter(f => f.category === 'underwater').length },
-    { id: 'garden_landscape', label: 'โคมในสวน & ข้อจำกัด', icon: Trees, count: FAQ_DATA.filter(f => f.category === 'garden_landscape').length },
-    { id: 'dali_control', label: 'ระบบ DALI & Control', icon: Cpu, count: FAQ_DATA.filter(f => f.category === 'dali_control').length },
+    { id: 'all', label: 'คำถามทั้งหมด (All FAQ)', icon: BookOpen, count: displayFaqs.length },
+    { id: 'switching_power', label: 'หม้อแปลง Switching', icon: Zap, count: displayFaqs.filter(f => f.category === 'switching_power').length },
+    { id: 'dimming_driver', label: 'หม้อแปลงดิม (Dimmable)', icon: Sliders, count: displayFaqs.filter(f => f.category === 'dimming_driver').length },
+    { id: 'cable_sizing', label: 'สายไฟ 24V & ระยะสาย', icon: Cable, count: displayFaqs.filter(f => f.category === 'cable_sizing').length },
+    { id: 'strip_neonflex', label: 'ตัดต่อ Strip & Neon Flex', icon: Scissors, count: displayFaqs.filter(f => f.category === 'strip_neonflex').length },
+    { id: 'underwater', label: 'โคมใต้น้ำ & สายใต้น้ำ', icon: Waves, count: displayFaqs.filter(f => f.category === 'underwater').length },
+    { id: 'garden_landscape', label: 'โคมในสวน & ข้อจำกัด', icon: Trees, count: displayFaqs.filter(f => f.category === 'garden_landscape').length },
+    { id: 'dali_control', label: 'ระบบ DALI & Control', icon: Cpu, count: displayFaqs.filter(f => f.category === 'dali_control').length },
   ];
 
-  const filteredFaqs = FAQ_DATA.filter(item => {
+  const filteredFaqs = displayFaqs.filter(item => {
     const matchCat = selectedCategory === 'all' || item.category === selectedCategory;
     const query = searchQuery.trim().toLowerCase();
     if (!query) return matchCat;
@@ -328,49 +132,197 @@ export const FaqKnowledgeHub: React.FC = () => {
     }));
   };
 
+  const handleCopyFaq = (faq: FaqItem, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const textToCopy = `📌 Q: ${faq.question}\n\n💡 สรุปคำตอบ: ${faq.summary}\n\n${faq.steps ? `📋 ขั้นตอน/วิธีปฏิบัติ:\n${faq.steps.join('\n')}\n\n` : ''}${faq.technicalTips ? `⚠️ ข้อควรระวัง: ${faq.technicalTips}\n\n` : ''}#LUMENCRAFT #TechnicalFAQ`;
+    navigator.clipboard.writeText(textToCopy);
+    setCopiedId(faq.id);
+    setTimeout(() => setCopiedId(null), 2500);
+  };
+
+  // Open modal to add new FAQ
+  const handleOpenAddModal = () => {
+    setEditingFaq(null);
+    setFaqCategory('switching_power');
+    setFaqQuestion('');
+    setFaqSummary('');
+    setFaqStepsText('');
+    setFaqTechnicalTips('');
+    setFaqCommonCausesText('');
+    setFaqTagsText('หม้อแปลง, Switching, เทคนิคหน้างาน');
+    setFaqAuthorName('ฝ่ายวิศวกรรม LUMENCRAFT');
+    setIsEditModalOpen(true);
+  };
+
+  // Open modal to edit existing FAQ
+  const handleOpenEditModal = (faq: FaqItem, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingFaq(faq);
+    setFaqCategory(faq.category);
+    setFaqQuestion(faq.question);
+    setFaqSummary(faq.summary);
+    setFaqStepsText(faq.steps ? faq.steps.join('\n') : '');
+    setFaqTechnicalTips(faq.technicalTips || '');
+    setFaqCommonCausesText(faq.commonCauses ? faq.commonCauses.join('\n') : '');
+    setFaqTagsText(faq.tags ? faq.tags.join(', ') : '');
+    setFaqAuthorName(faq.authorName || 'ฝ่ายวิศวกรรม LUMENCRAFT');
+    setIsEditModalOpen(true);
+  };
+
+  // Save FAQ (Create or Update)
+  const handleSaveFaq = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!faqQuestion.trim() || !faqSummary.trim()) {
+      alert('กรุณาระบุหัวข้อคำถามและคำตอบสรุป');
+      return;
+    }
+
+    const steps = faqStepsText.split('\n').map(s => s.trim()).filter(Boolean);
+    const commonCauses = faqCommonCausesText.split('\n').map(s => s.trim()).filter(Boolean);
+    const tags = faqTagsText.split(',').map(t => t.trim()).filter(Boolean);
+
+    const categoryLabel = CATEGORY_META[faqCategory]?.label || 'คู่มือเทคนิค';
+
+    if (editingFaq) {
+      const updated: FaqItem = {
+        ...editingFaq,
+        category: faqCategory,
+        categoryLabel,
+        question: faqQuestion.trim(),
+        summary: faqSummary.trim(),
+        steps: steps.length > 0 ? steps : undefined,
+        technicalTips: faqTechnicalTips.trim() || undefined,
+        commonCauses: commonCauses.length > 0 ? commonCauses : undefined,
+        tags: tags.length > 0 ? tags : ['FAQ'],
+        authorName: faqAuthorName.trim() || 'ฝ่ายวิศวกรรม LUMENCRAFT',
+        updatedAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
+      };
+      if (onUpdateFaq) {
+        onUpdateFaq(updated);
+      }
+    } else {
+      const newFaq: FaqItem = {
+        id: `faq_custom_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        category: faqCategory,
+        categoryLabel,
+        question: faqQuestion.trim(),
+        summary: faqSummary.trim(),
+        steps: steps.length > 0 ? steps : undefined,
+        technicalTips: faqTechnicalTips.trim() || undefined,
+        commonCauses: commonCauses.length > 0 ? commonCauses : undefined,
+        tags: tags.length > 0 ? tags : ['FAQ'],
+        authorName: faqAuthorName.trim() || 'ฝ่ายวิศวกรรม LUMENCRAFT',
+        createdAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
+      };
+      if (onAddFaq) {
+        onAddFaq(newFaq);
+      }
+    }
+
+    setIsEditModalOpen(false);
+  };
+
+  // Delete FAQ handler
+  const handleDeleteFaqClick = (faq: FaqItem, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (confirm(`คุณต้องการลบ FAQ หัวข้อ "${faq.question}" ใช่หรือไม่?`)) {
+      if (onDeleteFaq) {
+        onDeleteFaq(faq.id);
+      }
+    }
+  };
+
+  // Submit Question to Engineers (Ask Question flow)
   const handleSubmitQuestion = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newQuestion.trim()) return;
+
+    if (onSendInquiry) {
+      onSendInquiry({
+        soNumber: newSoNumber.trim() || 'SO-FAQ-INQ',
+        projectName: newProjectName.trim() || 'คำถามเทคนิคทั่วไปเพื่อบรรจุใน FAQ',
+        salesName: newSalesName.trim() || 'ฝ่ายขาย/ผู้ดูแลระบบ',
+        engineerName: newEngineerName.trim() || 'พัด',
+        message: newDetail.trim() 
+          ? `[หมวด: ${CATEGORY_META[newCategory]?.label}] ${newQuestion.trim()} (รายละเอียด: ${newDetail.trim()})`
+          : `[หมวด: ${CATEGORY_META[newCategory]?.label}] ${newQuestion.trim()}`,
+        forFaq: true,
+        category: newCategory,
+      });
+    }
+
     setSubmitSuccess(true);
     setTimeout(() => {
       setSubmitSuccess(false);
       setShowAskModal(false);
       setNewQuestion('');
       setNewDetail('');
+      setNewSoNumber('');
+      setNewProjectName('');
     }, 2000);
   };
+
+  // Calculations
+  // 1. Switching Wattage
+  const totalStripWatts = calcStripLength * calcWattPerMeter;
+  const recommendedPsuWatts = totalStripWatts / (calcSafetyFactor || 0.8);
+  const currentAmp24V = recommendedPsuWatts / 24;
+
+  // 2. Voltage Drop
+  const loadAmp = calcLoadWatts / 24;
+  const voltageDropVolts = (2 * calcCableLength * loadAmp * 0.0175) / (calcCableSize || 2.5);
+  const voltageAtEnd = 24 - voltageDropVolts;
+  const voltageDropPercent = (voltageDropVolts / 24) * 100;
+  const isVoltageDropSafe = voltageDropPercent <= 8;
+
+  // Inquiries for FAQ candidates
+  const faqCandidates = inquiries.filter(inq => inq.forFaq || inq.category);
 
   return (
     <div className="max-w-7xl mx-auto space-y-6 pb-16">
       
       {/* Top Banner */}
-      <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 text-white rounded-2xl p-6 sm:p-8 shadow-md border border-slate-800 relative overflow-hidden">
+      <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-indigo-950 text-white rounded-2xl p-6 sm:p-8 shadow-md border border-slate-800 relative overflow-hidden">
         <div className="absolute right-0 top-0 translate-x-10 -translate-y-10 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none"></div>
         
-        <div className="relative z-10 space-y-3">
-          <div className="flex items-center space-x-2">
-            <span className="px-2.5 py-0.5 rounded-full bg-amber-500 text-slate-950 font-black text-[11px] shadow-xs flex items-center gap-1">
-              <Sparkles className="w-3.5 h-3.5" />
-              Technical Engineering Knowledge
-            </span>
-            <span className="text-xs text-slate-300">
-              คู่มือเทคนิคไฟฟ้าแสงสว่าง: หม้อแปลง, สายไฟ 24V, การตัดต่อไฟเส้น, งานใต้น้ำ, และสวน
-            </span>
+        <div className="relative z-10 space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center space-x-2">
+              <span className="px-2.5 py-0.5 rounded-full bg-amber-500 text-slate-950 font-black text-[11px] shadow-xs flex items-center gap-1">
+                <Sparkles className="w-3.5 h-3.5" />
+                Technical Engineering Knowledge Base
+              </span>
+              <span className="text-xs text-slate-300">
+                คู่มือเทคนิคไฟฟ้าแสงสว่าง: หม้อแปลง, สายไฟ 24V, การตัดต่อไฟเส้น, งานใต้น้ำ, และสวน
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleOpenAddModal}
+                className="px-3.5 py-2 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-md transition flex items-center gap-1.5 cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>เพิ่มคำถาม-คำตอบ FAQ ใหม่</span>
+              </button>
+            </div>
           </div>
 
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-white flex items-center gap-3">
-            <HelpCircle className="w-7 h-7 text-amber-400" />
-            8. FAQ Knowledge (ถามตอบและข้อมูลปัญหาด้านเทคนิค)
-          </h1>
-
-          <p className="text-xs sm:text-sm text-slate-300 max-w-3xl leading-relaxed">
-            ศูนย์รวมองค์ความรู้ด้านวิศวกรรมแสงสว่าง LUMENCRAFT ครอบคลุมการเลือกหม้อแปลง Switching 12V/24V, หม้อแปลงดิม DALI/0-10V/Triac, 
-            การคำนวณขนาดสายไฟและระยะสาย 24V (Voltage Drop), เทคนิคการตัดต่อ LED Strip & Neon Flex, การต่อสายและติดตั้งโคมใต้น้ำ IP68, 
-            และการติดตั้งโคมในสวน/ฝังพื้นพร้อมข้อจำกัดทางสภาพแวดล้อม
-          </p>
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-extrabold text-white flex items-center gap-3">
+                <HelpCircle className="w-7 h-7 text-amber-400" />
+                8. FAQ Knowledge (ถามตอบและข้อมูลปัญหาด้านเทคนิค)
+              </h1>
+              <p className="text-xs sm:text-sm text-slate-300 max-w-3xl leading-relaxed mt-1">
+                ศูนย์รวมองค์ความรู้ด้านวิศวกรรมแสงสว่าง LUMENCRAFT สามารถเพิ่ม-แก้ไขคำถามคำตอบได้โดยตรง 
+                และเชื่อมโยงกับคำถามฝ่ายขายที่วิศวกรตอบเพื่อบรรจุขึ้นเป็น FAQ อย่างเป็นทางการ
+              </p>
+            </div>
+          </div>
 
           {/* Quick Search Bar */}
-          <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-3 max-w-2xl">
+          <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-3 max-w-3xl">
             <div className="relative flex-1">
               <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
               <input
@@ -392,183 +344,621 @@ export const FaqKnowledgeHub: React.FC = () => {
 
             <button
               onClick={() => setShowAskModal(true)}
-              className="px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-md transition flex items-center justify-center gap-2 shrink-0 cursor-pointer"
+              className="px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold bg-white hover:bg-slate-100 text-slate-900 shadow-md transition flex items-center justify-center gap-2 shrink-0 cursor-pointer"
             >
-              <MessageSquare className="w-4 h-4" />
-              สอบถามปัญหาเทคนิคใหม่
+              <MessageSquare className="w-4 h-4 text-amber-600" />
+              <span>ส่งคำถามให้วิศวกรตอบ</span>
             </button>
           </div>
         </div>
       </div>
 
-      {/* Category Navigation Pills */}
-      <div className="flex flex-wrap gap-2">
-        {categories.map(cat => {
-          const Icon = cat.icon;
-          const isSelected = selectedCategory === cat.id;
-          return (
-            <button
-              key={cat.id}
-              onClick={() => setSelectedCategory(cat.id)}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
-                isSelected
-                  ? 'bg-slate-900 text-white shadow-sm ring-1 ring-slate-800'
-                  : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
-              }`}
-            >
-              <Icon className={`w-3.5 h-3.5 ${isSelected ? 'text-amber-400' : 'text-slate-500'}`} />
-              <span>{cat.label}</span>
-              <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${
-                isSelected ? 'bg-slate-800 text-amber-400' : 'bg-slate-100 text-slate-600'
-              }`}>
-                {cat.count}
+      {/* Main Section Navigation Tabs */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3">
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={() => setActiveTab('faqs')}
+            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
+              activeTab === 'faqs'
+                ? 'bg-slate-900 text-white shadow-md'
+                : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+            }`}
+          >
+            <BookOpen className="w-4 h-4 text-amber-400" />
+            <span>คลังคำถาม-คำตอบ FAQ ({displayFaqs.length})</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('candidates')}
+            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
+              activeTab === 'candidates'
+                ? 'bg-slate-900 text-white shadow-md'
+                : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+            }`}
+          >
+            <MessageSquare className="w-4 h-4 text-amber-400" />
+            <span>คำถามจากฝ่ายขาย & รอสร้าง FAQ ({faqCandidates.length})</span>
+            {faqCandidates.filter(c => c.status === 'replied' && !c.promotedToFaq).length > 0 && (
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500 text-slate-950 animate-pulse">
+                {faqCandidates.filter(c => c.status === 'replied' && !c.promotedToFaq).length} พร้อมขึ้น FAQ
               </span>
-            </button>
-          );
-        })}
+            )}
+          </button>
+
+          <button
+            onClick={() => setActiveTab('calculators')}
+            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
+              activeTab === 'calculators'
+                ? 'bg-slate-900 text-white shadow-md'
+                : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+            }`}
+          >
+            <Calculator className="w-4 h-4 text-amber-400" />
+            <span>เครื่องมือคำนวณหน้างาน (Engineering Calculators)</span>
+          </button>
+        </div>
+
+        <div className="text-xs text-slate-500 font-medium">
+          คลังความรู้มาตรฐานอัปเดตอัตโนมัติผ่าน Cloud Firestore
+        </div>
       </div>
 
-      {/* FAQ Items Grid / Accordion */}
-      <div className="space-y-3">
-        {filteredFaqs.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center space-y-3 shadow-2xs">
-            <HelpCircle className="w-12 h-12 text-slate-300 mx-auto" />
-            <h3 className="text-base font-bold text-slate-800">ไม่พบคำถามหรือหัวข้อที่ค้นหา "{searchQuery}"</h3>
-            <p className="text-xs text-slate-500">
-              ลองค้นหาด้วยคำค้นอื่น เช่น "DALI", "Flicker", "Check-in", "สายสัญญาณ", "Address" หรือกดปุ่มสอบถามปัญหาใหม่
-            </p>
-            <div className="pt-2 flex justify-center gap-2">
-              <button
-                onClick={() => { setSearchQuery(''); setSelectedCategory('all'); }}
-                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl"
-              >
-                ดูคำถามทั้งหมด
-              </button>
-              <button
-                onClick={() => setShowAskModal(true)}
-                className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-xl"
-              >
-                ส่งคำถามให้วิศวกร
-              </button>
+      {/* ================= TAB 1: FAQ KNOWLEDGE BASE ================= */}
+      {activeTab === 'faqs' && (
+        <div className="space-y-6">
+          
+          {/* Category Navigation Pills */}
+          <div className="flex flex-wrap gap-2">
+            {categories.map(cat => {
+              const Icon = cat.icon;
+              const isSelected = selectedCategory === cat.id;
+              return (
+                <button
+                  key={cat.id}
+                  onClick={() => setSelectedCategory(cat.id)}
+                  className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
+                    isSelected
+                      ? 'bg-slate-900 text-white shadow-sm ring-1 ring-slate-800'
+                      : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
+                  }`}
+                >
+                  <Icon className={`w-3.5 h-3.5 ${isSelected ? 'text-amber-400' : 'text-slate-500'}`} />
+                  <span>{cat.label}</span>
+                  <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${
+                    isSelected ? 'bg-slate-800 text-amber-400' : 'bg-slate-100 text-slate-600'
+                  }`}>
+                    {cat.count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* FAQ Items Grid / Accordion */}
+          <div className="space-y-3">
+            {filteredFaqs.length === 0 ? (
+              <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center space-y-3 shadow-2xs">
+                <HelpCircle className="w-12 h-12 text-slate-300 mx-auto" />
+                <h3 className="text-base font-bold text-slate-800">ไม่พบคำถามหรือหัวข้อที่ค้นหา "{searchQuery}"</h3>
+                <p className="text-xs text-slate-500">
+                  ลองค้นหาด้วยคำค้นอื่น หรือกดปุ่มเพิ่มคำถามคำตอบใหม่เพื่อบรรจุลงในระบบ
+                </p>
+                <div className="pt-2 flex justify-center gap-2">
+                  <button
+                    onClick={() => { setSearchQuery(''); setSelectedCategory('all'); }}
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl"
+                  >
+                    ดูคำถามทั้งหมด
+                  </button>
+                  <button
+                    onClick={handleOpenAddModal}
+                    className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-xl flex items-center gap-1.5"
+                  >
+                    <Plus className="w-4 h-4" />
+                    เพิ่ม FAQ นี้ลงในฐานข้อมูล
+                  </button>
+                </div>
+              </div>
+            ) : (
+              filteredFaqs.map((faq, index) => {
+                const isExpanded = expandedId === faq.id;
+                const isVoted = helpfulVotes[faq.id];
+                const isCopied = copiedId === faq.id;
+
+                return (
+                  <div
+                    key={faq.id}
+                    className={`bg-white rounded-2xl border transition-all duration-200 overflow-hidden shadow-2xs ${
+                      isExpanded ? 'border-amber-400/80 shadow-md ring-1 ring-amber-400/30' : 'border-slate-200 hover:border-slate-300'
+                    }`}
+                  >
+                    {/* Accordion Header */}
+                    <div
+                      onClick={() => toggleExpand(faq.id)}
+                      className="w-full text-left p-5 flex items-start justify-between gap-4 cursor-pointer focus:outline-hidden"
+                    >
+                      <div className="space-y-1.5 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-50 text-amber-900 border border-amber-200">
+                            {faq.categoryLabel || CATEGORY_META[faq.category]?.label || 'เทคนิคทั่วไป'}
+                          </span>
+                          {faq.authorName && (
+                            <span className="text-[10px] text-slate-500 flex items-center gap-1 bg-slate-100 px-2 py-0.5 rounded-md">
+                              <UserCheck className="w-3 h-3 text-slate-500" />
+                              {faq.authorName}
+                            </span>
+                          )}
+                          {faq.tags && faq.tags.map(t => (
+                            <span key={t} className="text-[10px] text-slate-400 flex items-center gap-0.5">
+                              <Tag className="w-2.5 h-2.5" />
+                              {t}
+                            </span>
+                          ))}
+                        </div>
+                        <h3 className="text-sm sm:text-base font-bold text-slate-900 flex items-center gap-2">
+                          <span className="text-amber-600 font-mono text-xs font-black">Q{index + 1}:</span>
+                          {faq.question}
+                        </h3>
+                        <p className="text-xs text-slate-500 line-clamp-1">
+                          {faq.summary}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={(e) => handleOpenEditModal(faq, e)}
+                            title="แก้ไข FAQ นี้"
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-amber-700 hover:bg-amber-50 transition cursor-pointer"
+                          >
+                            <Edit3 className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => handleDeleteFaqClick(faq, e)}
+                            title="ลบ FAQ นี้"
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => handleCopyFaq(faq, e)}
+                            title="คัดลอกคำตอบเพื่อส่งให้ลูกค้า/ทีมงาน"
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition cursor-pointer"
+                          >
+                            <Copy className="w-4 h-4" />
+                          </button>
+                        </div>
+
+                        <div className="p-2 rounded-xl bg-slate-50 text-slate-500 shrink-0 group-hover:bg-amber-50 group-hover:text-amber-800 transition">
+                          {isExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Accordion Body */}
+                    {isExpanded && (
+                      <div className="px-5 pb-5 pt-1 border-t border-slate-100 text-xs sm:text-sm text-slate-700 space-y-4 animate-in fade-in duration-200">
+                        
+                        <p className="font-medium text-slate-800 leading-relaxed bg-slate-50/70 p-3.5 rounded-xl border border-slate-100">
+                          {faq.summary}
+                        </p>
+
+                        {/* Common Causes if any */}
+                        {faq.commonCauses && faq.commonCauses.length > 0 && (
+                          <div className="bg-rose-50/70 border border-rose-200/80 rounded-xl p-3.5 space-y-2">
+                            <div className="text-xs font-bold text-rose-900 flex items-center gap-1.5">
+                              <AlertTriangle className="w-4 h-4 text-rose-600" />
+                              สาเหตุที่พบบ่อย (Common Root Causes):
+                            </div>
+                            <ul className="space-y-1 text-xs text-rose-800 pl-4 list-disc">
+                              {faq.commonCauses.map((cause, ci) => (
+                                <li key={ci}>{cause}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        {/* Step-by-Step Guidance */}
+                        {faq.steps && faq.steps.length > 0 && (
+                          <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-4 space-y-2.5">
+                            <div className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                              แนวทางแก้ไขทีละขั้นตอน / วิธีคำนวณ (Step-by-Step Action Plan):
+                            </div>
+                            <div className="space-y-2 text-xs text-slate-700">
+                              {faq.steps.map((step, si) => (
+                                <div key={si} className="p-2 bg-white rounded-lg border border-slate-200/60 shadow-2xs leading-relaxed flex items-start gap-2">
+                                  <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-800 font-bold text-[10px] flex items-center justify-center shrink-0 mt-0.5">
+                                    {si + 1}
+                                  </span>
+                                  <span>{step}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Technical Tips */}
+                        {faq.technicalTips && (
+                          <div className="bg-amber-50/80 border border-amber-200 rounded-xl p-3.5 flex items-start gap-2.5">
+                            <Lightbulb className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                            <div className="text-xs text-amber-950">
+                              <span className="font-bold">เคล็ดลับช่างเทคนิค LUMENCRAFT:</span> {faq.technicalTips}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Footer Feedback and Actions */}
+                        <div className="pt-3 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 text-xs text-slate-500">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[11px] text-slate-400">
+                              รับรองโดย: {faq.authorName || 'ฝ่ายวิศวกรรม'} {faq.updatedAt ? `(ปรับปรุง: ${faq.updatedAt})` : ''}
+                            </span>
+                          </div>
+                          
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={(e) => handleCopyFaq(faq, e)}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 transition cursor-pointer"
+                            >
+                              <Copy className="w-3.5 h-3.5 text-slate-500" />
+                              <span>{isCopied ? 'คัดลอกเรียบร้อยแล้ว!' : 'คัดลอกข้อความ'}</span>
+                            </button>
+
+                            <button
+                              onClick={(e) => handleVoteHelpful(faq.id, e)}
+                              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                                isVoted
+                                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                  : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                              }`}
+                            >
+                              <ThumbsUp className={`w-3.5 h-3.5 ${isVoted ? 'text-emerald-700' : 'text-slate-500'}`} />
+                              <span>{isVoted ? 'บันทึกเป็นประโยชน์แล้ว!' : 'มีประโยชน์'}</span>
+                            </button>
+                          </div>
+                        </div>
+
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+        </div>
+      )}
+
+      {/* ================= TAB 2: SALES INQUIRIES & FAQ CANDIDATES ================= */}
+      {activeTab === 'candidates' && (
+        <div className="space-y-4">
+          <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <MessageSquare className="w-5 h-5 text-amber-500" />
+                ข้อซักถามจากฝ่ายขายที่รอคำตอบ & พร้อมบรรจุขึ้น FAQ
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                ฝ่ายขายสามารถตั้งคำถามพร้อมเลือกหัวข้อ และเมื่อวิศวกรตอบแล้วสามารถกด "บันทึกเป็น FAQ" เพื่อนำเข้าสู่ฐานข้อมูลความรู้ส่วนกลางทันที
+              </p>
+            </div>
+
+            <button
+              onClick={() => setShowAskModal(true)}
+              className="px-4 py-2 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-sm flex items-center gap-1.5 shrink-0"
+            >
+              <Plus className="w-4 h-4" />
+              <span>สร้างคำถามใหม่ส่งให้วิศวกร</span>
+            </button>
+          </div>
+
+          {faqCandidates.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-12 text-center text-xs text-slate-400 space-y-2">
+              <MessageSquare className="w-8 h-8 mx-auto text-slate-300" />
+              <p className="font-bold text-slate-600">ยังไม่มีข้อซักถามที่ระบุหมวด FAQ ในขณะนี้</p>
+              <p>คุณสามารถกดปุ่ม "สร้างคำถามใหม่ส่งให้วิศวกร" ด้านบนเพื่อเริ่มถามคำถามได้</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-4">
+              {faqCandidates.map(inq => (
+                <div key={inq.id} className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                    <div className="flex items-center gap-2">
+                      <span className="px-2.5 py-1 rounded-md text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                        {CATEGORY_META[inq.category || 'switching_power']?.label || 'หม้อแปลง Switching'}
+                      </span>
+                      <span className="text-xs font-bold text-slate-900 font-mono">{inq.soNumber}</span>
+                      <span className="text-xs text-slate-600">{inq.projectName}</span>
+                    </div>
+
+                    <div className="flex items-center gap-2 text-xs">
+                      <span className="text-slate-400 text-[11px]">{inq.createdAt}</span>
+                      <span className="px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 font-semibold text-[11px]">
+                        ผู้ถาม: {inq.salesName}
+                      </span>
+                      <span className="px-2 py-0.5 rounded bg-amber-50 text-amber-700 font-semibold text-[11px]">
+                        ช่างผู้รับผิดชอบ: {inq.engineerName}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/70 text-xs text-slate-800">
+                    <span className="font-bold text-slate-900">คำถามจากเซลล์: </span>
+                    {inq.message}
+                  </div>
+
+                  {inq.status === 'replied' ? (
+                    <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-200 space-y-2">
+                      <div className="flex items-center justify-between text-xs font-bold text-emerald-900">
+                        <span className="flex items-center gap-1.5">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                          ช่าง{inq.engineerName} ได้ตอบกลับคำถามนี้แล้ว:
+                        </span>
+                        <span className="text-[11px] font-mono text-emerald-700">{inq.repliedAt}</span>
+                      </div>
+                      <p className="text-xs text-emerald-950 bg-white/80 p-3 rounded-lg border border-emerald-100 leading-relaxed">
+                        {inq.replyMessage}
+                      </p>
+
+                      <div className="pt-2 flex items-center justify-between border-t border-emerald-200">
+                        {inq.promotedToFaq ? (
+                          <span className="text-xs font-bold text-amber-800 bg-amber-100 px-3 py-1 rounded-full border border-amber-300 flex items-center gap-1">
+                            <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                            บันทึกขึ้นระบบ FAQ เรียบร้อยแล้ว
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (onPromoteInquiryToFaq) {
+                                onPromoteInquiryToFaq(inq, {
+                                  category: inq.category || 'switching_power',
+                                  question: inq.message,
+                                  summary: inq.replyMessage || '',
+                                  steps: [inq.replyMessage || ''],
+                                  authorName: `ช่าง${inq.engineerName}`,
+                                });
+                              }
+                            }}
+                            className="px-4 py-1.5 rounded-lg text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-xs flex items-center gap-1.5 cursor-pointer"
+                          >
+                            <Sparkles className="w-3.5 h-3.5" />
+                            <span>✨ บันทึกขึ้นคลัง FAQ ประจำบริษัท (1-Click Promote)</span>
+                          </button>
+                        )}
+                        <span className="text-[11px] text-slate-500">
+                          พร้อมใช้งานในส่วน FAQ ทันทีหลังกดบันทึก
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between p-3 rounded-xl bg-amber-50/60 border border-amber-200 text-xs">
+                      <span className="text-amber-800 font-medium flex items-center gap-1.5">
+                        <Clock className="w-4 h-4 text-amber-600" />
+                        อยู่ระหว่างรอช่าง {inq.engineerName} เข้ามาตรวจสอบและตอบกลับทางระบบ
+                      </span>
+                      <span className="text-[11px] text-slate-500">
+                        เมื่อตอบกลับแล้วจะสามารถนำขึ้น FAQ ได้ทันที
+                      </span>
+                    </div>
+                  )}
+
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ================= TAB 3: ENGINEERING CALCULATORS ================= */}
+      {activeTab === 'calculators' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          
+          {/* 1. Switching Wattage & Derating Calculator */}
+          <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-4">
+            <div className="flex items-center space-x-3 border-b border-slate-100 pb-3">
+              <div className="p-2.5 rounded-xl bg-amber-100 text-amber-800">
+                <Zap className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">
+                  เครื่องคำนวณขนาดหม้อแปลง Switching 12V/24V
+                </h3>
+                <p className="text-xs text-slate-500">
+                  คำนวณวัตต์รวมและเผื่อ Safety Factor (Derating 80% Rule)
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3.5 text-xs">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  1. ความยาวไฟเส้น LED Strip ทั้งหมด (เมตร):
+                </label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="range"
+                    min={1}
+                    max={100}
+                    step={0.5}
+                    value={calcStripLength}
+                    onChange={e => setCalcStripLength(Number(e.target.value))}
+                    className="flex-1 accent-amber-600"
+                  />
+                  <span className="w-16 px-2 py-1 rounded-lg bg-slate-100 border border-slate-300 font-bold font-mono text-center">
+                    {calcStripLength} m
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  2. กำลังวัตต์ต่อเมตรของไฟเส้น (Watt/Meter):
+                </label>
+                <div className="grid grid-cols-4 gap-2">
+                  {[4.8, 9.6, 14.4, 19.2].map(w => (
+                    <button
+                      key={w}
+                      type="button"
+                      onClick={() => setCalcWattPerMeter(w)}
+                      className={`p-2 rounded-xl text-xs font-bold border transition ${
+                        calcWattPerMeter === w
+                          ? 'bg-amber-500 text-slate-950 border-amber-600 shadow-xs'
+                          : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      {w} W/m
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  3. กฎความปลอดภัย Safety Derating Factor:
+                </label>
+                <select
+                  value={calcSafetyFactor}
+                  onChange={e => setCalcSafetyFactor(Number(e.target.value))}
+                  className="w-full p-2 rounded-lg border border-slate-300 bg-white font-semibold text-slate-800"
+                >
+                  <option value={0.8}>80% Derating (มาตรฐานวิศวกรรม LUMENCRAFT)</option>
+                  <option value={0.7}>70% Derating (พื้นที่อุณหภูมิสูง / กล่องปิดทึบ)</option>
+                  <option value={0.85}>85% Derating (ติดตั้งในที่เปิดโล่ง ถ่ายเทดี)</option>
+                </select>
+              </div>
+
+              <div className="p-4 rounded-xl bg-gradient-to-br from-slate-900 to-slate-950 text-white space-y-2 shadow-inner">
+                <div className="text-[11px] text-amber-400 font-bold uppercase tracking-wider">
+                  ผลลัพธ์การคำนวณหม้อแปลง
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-slate-300">โหลดวัตต์รวมหน้างาน:</span>
+                  <span className="font-mono font-bold text-white text-sm">{totalStripWatts.toFixed(1)} Watts</span>
+                </div>
+                <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-800">
+                  <span className="text-amber-300 font-bold">ขนาดหม้อแปลงขั้นต่ำที่ต้องเลือก:</span>
+                  <span className="font-mono font-black text-amber-400 text-base">{Math.ceil(recommendedPsuWatts)} Watts</span>
+                </div>
+                <div className="flex items-center justify-between text-xs text-slate-400">
+                  <span>กระแสไฟ 24VDC:</span>
+                  <span className="font-mono font-bold text-white">~{currentAmp24V.toFixed(2)} A</span>
+                </div>
+                <div className="text-[11px] text-slate-300 bg-slate-800/80 p-2 rounded border border-slate-700">
+                  💡 รุ่นหม้อแปลงแนะนำ: <strong>{Math.ceil(recommendedPsuWatts) <= 100 ? '100W/150W 24V' : Math.ceil(recommendedPsuWatts) <= 200 ? '200W/240W 24V' : Math.ceil(recommendedPsuWatts) <= 350 ? '350W 24V' : 'แยกวงจรหม้อแปลง 2 ตัว'}</strong>
+                </div>
+              </div>
             </div>
           </div>
-        ) : (
-          filteredFaqs.map((faq, index) => {
-            const isExpanded = expandedId === faq.id;
-            const isVoted = helpfulVotes[faq.id];
 
-            return (
-              <div
-                key={faq.id}
-                className={`bg-white rounded-2xl border transition-all duration-200 overflow-hidden shadow-2xs ${
-                  isExpanded ? 'border-amber-400/80 shadow-md ring-1 ring-amber-400/30' : 'border-slate-200 hover:border-slate-300'
-                }`}
-              >
-                {/* Accordion Header */}
-                <button
-                  onClick={() => toggleExpand(faq.id)}
-                  className="w-full text-left p-5 flex items-start justify-between gap-4 cursor-pointer focus:outline-hidden"
-                >
-                  <div className="space-y-1.5 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-50 text-amber-900 border border-amber-200">
-                        {faq.categoryLabel}
-                      </span>
-                      {faq.tags.map(t => (
-                        <span key={t} className="text-[10px] text-slate-400 flex items-center gap-0.5">
-                          <Tag className="w-2.5 h-2.5" />
-                          {t}
-                        </span>
-                      ))}
-                    </div>
-                    <h3 className="text-sm sm:text-base font-bold text-slate-900 flex items-center gap-2">
-                      <span className="text-amber-600 font-mono text-xs font-black">Q{index + 1}:</span>
-                      {faq.question}
-                    </h3>
-                    <p className="text-xs text-slate-500 line-clamp-1">
-                      {faq.summary}
-                    </p>
-                  </div>
-
-                  <div className="p-2 rounded-xl bg-slate-50 text-slate-500 shrink-0 mt-1 group-hover:bg-amber-50 group-hover:text-amber-800 transition">
-                    {isExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
-                  </div>
-                </button>
-
-                {/* Accordion Body */}
-                {isExpanded && (
-                  <div className="px-5 pb-5 pt-1 border-t border-slate-100 text-xs sm:text-sm text-slate-700 space-y-4 animate-fadeIn">
-                    
-                    <p className="font-medium text-slate-800 leading-relaxed">
-                      {faq.summary}
-                    </p>
-
-                    {/* Common Causes if any */}
-                    {faq.commonCauses && (
-                      <div className="bg-rose-50/70 border border-rose-200/80 rounded-xl p-3.5 space-y-2">
-                        <div className="text-xs font-bold text-rose-900 flex items-center gap-1.5">
-                          <AlertTriangle className="w-4 h-4 text-rose-600" />
-                          สาเหตุที่พบบ่อย (Common Root Causes):
-                        </div>
-                        <ul className="space-y-1 text-xs text-rose-800 pl-4 list-disc">
-                          {faq.commonCauses.map((cause, ci) => (
-                            <li key={ci}>{cause}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-
-                    {/* Step-by-Step Guidance */}
-                    {faq.steps && (
-                      <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-4 space-y-2.5">
-                        <div className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
-                          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                          แนวทางแก้ไขทีละขั้นตอน (Step-by-Step Action Plan):
-                        </div>
-                        <div className="space-y-2 text-xs text-slate-700">
-                          {faq.steps.map((step, si) => (
-                            <div key={si} className="p-2 bg-white rounded-lg border border-slate-200/60 shadow-2xs leading-relaxed">
-                              {step}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Technical Tips */}
-                    {faq.technicalTips && (
-                      <div className="bg-amber-50/80 border border-amber-200 rounded-xl p-3.5 flex items-start gap-2.5">
-                        <Lightbulb className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                        <div className="text-xs text-amber-950">
-                          <span className="font-bold">เคล็ดลับช่างเทคนิค LUMENCRAFT:</span> {faq.technicalTips}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Footer Feedback */}
-                    <div className="pt-2 flex items-center justify-between border-t border-slate-100 text-xs text-slate-500">
-                      <span className="text-[11px]">เอกสารทางการรับรองโดยฝ่ายวิศวกรรม LUMENCRAFT</span>
-                      
-                      <button
-                        onClick={(e) => handleVoteHelpful(faq.id, e)}
-                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
-                          isVoted
-                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                            : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-                        }`}
-                      >
-                        <ThumbsUp className={`w-3.5 h-3.5 ${isVoted ? 'text-emerald-700' : 'text-slate-500'}`} />
-                        <span>{isVoted ? 'ขอบคุณสำหรับข้อมูล!' : 'บทความนี้มีประโยชน์'}</span>
-                      </button>
-                    </div>
-
-                  </div>
-                )}
+          {/* 2. Voltage Drop Calculator */}
+          <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-4">
+            <div className="flex items-center space-x-3 border-b border-slate-100 pb-3">
+              <div className="p-2.5 rounded-xl bg-blue-100 text-blue-800">
+                <Cable className="w-5 h-5" />
               </div>
-            );
-          })
-        )}
-      </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">
+                  เครื่องคำนวณแรงดันตกสาย 24V (Voltage Drop)
+                </h3>
+                <p className="text-xs text-slate-500">
+                  ตรวจสอบระยะสายไฟและขนาดสายทองแดงไม่ให้แสงดรอป
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3.5 text-xs">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  1. โหลดกำลังวัตต์ปลายทาง (Watts):
+                </label>
+                <input
+                  type="number"
+                  min={5}
+                  max={500}
+                  value={calcLoadWatts}
+                  onChange={e => setCalcLoadWatts(Number(e.target.value))}
+                  className="w-full p-2 rounded-lg border border-slate-300 font-bold font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  2. ระยะทางจากหม้อแปลงถึงจุดไฟ (เมตร):
+                </label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="range"
+                    min={1}
+                    max={60}
+                    value={calcCableLength}
+                    onChange={e => setCalcCableLength(Number(e.target.value))}
+                    className="flex-1 accent-blue-600"
+                  />
+                  <span className="w-16 px-2 py-1 rounded-lg bg-slate-100 border border-slate-300 font-bold font-mono text-center">
+                    {calcCableLength} m
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  3. ขนาดสายไฟทองแดง (sq.mm.):
+                </label>
+                <div className="grid grid-cols-4 gap-2">
+                  {[1.0, 1.5, 2.5, 4.0].map(s => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => setCalcCableSize(s)}
+                      className={`p-2 rounded-xl text-xs font-bold border transition ${
+                        calcCableSize === s
+                          ? 'bg-blue-600 text-white border-blue-700 shadow-xs'
+                          : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      {s} sq.mm.
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className={`p-4 rounded-xl text-white space-y-2 shadow-inner ${
+                isVoltageDropSafe ? 'bg-slate-900' : 'bg-rose-950'
+              }`}>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-slate-300">แรงดันตกในสาย (V_drop):</span>
+                  <span className="font-mono font-bold text-white text-sm">
+                    {voltageDropVolts.toFixed(2)} V ({voltageDropPercent.toFixed(1)}%)
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-800">
+                  <span className="text-slate-300 font-bold">แรงดันปลายสายที่ไฟเส้นได้รับ:</span>
+                  <span className={`font-mono font-black text-base ${isVoltageDropSafe ? 'text-emerald-400' : 'text-rose-400'}`}>
+                    {voltageAtEnd.toFixed(2)} VDC
+                  </span>
+                </div>
+                <div className={`p-2 rounded border text-[11px] ${
+                  isVoltageDropSafe
+                    ? 'bg-emerald-950/60 border-emerald-700 text-emerald-300'
+                    : 'bg-rose-900/60 border-rose-700 text-rose-200'
+                }`}>
+                  {isVoltageDropSafe ? (
+                    <span>✅ ผ่านมาตรฐาน: แรงดันตกไม่เกิน 8% แสงสว่างสม่ำเสมอ ไม่ดรอป</span>
+                  ) : (
+                    <span>⚠️ เกินเกณฑ์มาตรฐาน! แนะนำเพิ่มขนาดสายไฟเป็น 4.0 sq.mm. หรือขยับหม้อแปลงเข้าใกล้หน้างาน</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      )}
 
       {/* Engineering Hotline & Emergency Support Card */}
       <div className="bg-gradient-to-br from-slate-900 to-slate-950 text-white rounded-2xl p-6 shadow-md border border-slate-800 flex flex-col md:flex-row md:items-center md:justify-between gap-6">
@@ -603,9 +993,173 @@ export const FaqKnowledgeHub: React.FC = () => {
         </div>
       </div>
 
-      {/* ================= ASK QUESTION / SUBMIT ISSUE MODAL ================= */}
+      {/* ================= MODAL: ADD / EDIT FAQ ITEM ================= */}
+      {isEditModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[92vh] flex flex-col overflow-hidden shadow-2xl border border-slate-200 my-4">
+            
+            <div className="bg-gradient-to-r from-slate-900 to-indigo-950 text-white p-5 flex items-center justify-between border-b border-slate-700 shrink-0">
+              <div className="flex items-center space-x-3">
+                <div className="p-2.5 rounded-xl bg-amber-500 text-slate-950 font-black">
+                  <BookOpen className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">
+                    {editingFaq ? 'แก้ไขคำถาม-คำตอบ FAQ' : 'เพิ่มคำถาม-คำตอบ FAQ ใหม่ลงระบบ'}
+                  </h3>
+                  <p className="text-xs text-slate-300">
+                    ข้อมูลจะถูกบันทึกและซิงค์ผ่าน Cloud Firestore สำหรับฝ่ายขายและช่างทุกคน
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsEditModalOpen(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:bg-white/10 hover:text-white transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveFaq} className="p-5 overflow-y-auto flex-1 space-y-4 text-xs">
+              <div>
+                <label className="block font-bold text-slate-800 mb-1">
+                  หมวดหมู่ความรู้ (FAQ Category) <span className="text-rose-500">*</span>
+                </label>
+                <select
+                  value={faqCategory}
+                  onChange={e => setFaqCategory(e.target.value as FaqCategory)}
+                  className="w-full p-2.5 rounded-xl border border-slate-300 bg-white font-semibold text-slate-800 focus:ring-2 focus:ring-amber-500"
+                >
+                  <option value="switching_power">⚡ การเลือกหม้อแปลง Switching 12V/24V</option>
+                  <option value="dimming_driver">🎛️ การเลือกหม้อแปลงดิม (DALI, 0-10V, Triac, Push-Dim)</option>
+                  <option value="cable_sizing">📏 การเลือกสายไฟ 24V และระยะสาย (Voltage Drop)</option>
+                  <option value="strip_neonflex">✂️ การตัดต่อ LED Strip & Neon Flex</option>
+                  <option value="underwater">🌊 โคมใต้น้ำ & การต่อสายไฟใต้น้ำ (IP68)</option>
+                  <option value="garden_landscape">🌳 การติดตั้งโคมในสวน & ข้อจำกัด (IP67)</option>
+                  <option value="dali_control">💻 ระบบ DALI & Automation Control</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-800 mb-1">
+                  หัวข้อคำถาม (Question) <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="เช่น การต่อสายไฟใต้น้ำในสระว่ายน้ำระบบเกลือ ต้องใช้เทปและเรซินแบบใด?"
+                  value={faqQuestion}
+                  onChange={e => setFaqQuestion(e.target.value)}
+                  className="w-full p-2.5 rounded-xl border border-slate-300 font-semibold text-slate-900 focus:ring-2 focus:ring-amber-500"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-800 mb-1">
+                  คำตอบ / ข้อสรุปทางเทคนิค (Summary Answer) <span className="text-rose-500">*</span>
+                </label>
+                <textarea
+                  rows={3}
+                  placeholder="สรุปคำตอบทางเทคนิคที่กระชับและเข้าใจง่าย..."
+                  value={faqSummary}
+                  onChange={e => setFaqSummary(e.target.value)}
+                  className="w-full p-2.5 rounded-xl border border-slate-300 text-slate-800 focus:ring-2 focus:ring-amber-500"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-800 mb-1">
+                  ขั้นตอนการคำนวณ / แนวทางแก้ไขทีละขั้นตอน (1 บรรทัด = 1 ขั้นตอน)
+                </label>
+                <textarea
+                  rows={3}
+                  placeholder="1. ตรวจสอบแรงดันไฟและระยะสาย&#10;2. หล่อเรซินปิดทึบ 100%&#10;3. ทดสอบการรั่วไหลของกระแสไฟ"
+                  value={faqStepsText}
+                  onChange={e => setFaqStepsText(e.target.value)}
+                  className="w-full p-2.5 rounded-xl border border-slate-300 text-slate-800 focus:ring-2 focus:ring-amber-500 font-mono text-[11px]"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-800 mb-1">
+                  ข้อควรระวัง / เคล็ดลับช่างเทคนิค (Technical Tips & Precautions)
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="ข้อควรระวังสำคัญ เช่น ห้ามเปิดไฟใต้น้ำบนบกเกิน 1 นาที..."
+                  value={faqTechnicalTips}
+                  onChange={e => setFaqTechnicalTips(e.target.value)}
+                  className="w-full p-2.5 rounded-xl border border-slate-300 text-slate-800 focus:ring-2 focus:ring-amber-500"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-800 mb-1">
+                  สาเหตุที่พบบ่อย (1 บรรทัด = 1 สาเหตุ)
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="ใช้สายไฟผิดประเภท&#10;ไม่ได้ใส่ชั้นหินกรวดระบายน้ำ"
+                  value={faqCommonCausesText}
+                  onChange={e => setFaqCommonCausesText(e.target.value)}
+                  className="w-full p-2.5 rounded-xl border border-slate-300 text-slate-800 focus:ring-2 focus:ring-amber-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-800 mb-1">
+                    แท็กคำค้นหา (คั่นด้วยเครื่องหมายจุลภาค ,)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="หม้อแปลง, IP68, 24V, สายไฟ"
+                    value={faqTagsText}
+                    onChange={e => setFaqTagsText(e.target.value)}
+                    className="w-full p-2 rounded-xl border border-slate-300"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-800 mb-1">
+                    ชื่อผู้จัดทำ / วิศวกรผู้รับรอง
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="ฝ่ายวิศวกรรม LUMENCRAFT"
+                    value={faqAuthorName}
+                    onChange={e => setFaqAuthorName(e.target.value)}
+                    className="w-full p-2 rounded-xl border border-slate-300"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-slate-200 flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={() => setIsEditModalOpen(false)}
+                  className="px-4 py-2 rounded-xl font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 transition cursor-pointer"
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-md transition flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>บันทึก FAQ ลงระบบส่วนกลาง</span>
+                </button>
+              </div>
+            </form>
+
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL: ASK QUESTION TO ENGINEERS ================= */}
       {showAskModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4 border border-slate-200 my-8">
             
             <div className="flex items-center justify-between pb-3 border-b border-slate-200">
@@ -615,7 +1169,7 @@ export const FaqKnowledgeHub: React.FC = () => {
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-slate-900">ส่งคำถามหรือบันทึกปัญหาทางเทคนิคใหม่</h3>
-                  <p className="text-xs text-slate-500">ทีมวิศวกรจะนำข้อมูลไปตอบและบรรจุในคู่มือ FAQ</p>
+                  <p className="text-xs text-slate-500">ทีมวิศวกรจะนำข้อมูลไปตอบและสามารถบันทึกเป็น FAQ ประจำระบบได้</p>
                 </div>
               </div>
               <button
@@ -629,8 +1183,8 @@ export const FaqKnowledgeHub: React.FC = () => {
             {submitSuccess ? (
               <div className="p-6 text-center space-y-2 bg-emerald-50 rounded-xl border border-emerald-200">
                 <CheckCircle2 className="w-10 h-10 text-emerald-600 mx-auto animate-bounce" />
-                <h4 className="font-bold text-slate-900 text-sm">ส่งคำถามสำเร็จเรียบร้อย!</h4>
-                <p className="text-xs text-slate-600">ทีมวิศวกร LUMENCRAFT ได้รับข้อมูลแล้ว และจะทำการอัปเดตคู่มือโดยเร็ว</p>
+                <h4 className="font-bold text-slate-900 text-sm">ส่งคำถามไปยังทีมวิศวกรสำเร็จเรียบร้อย!</h4>
+                <p className="text-xs text-slate-600">คำถามจะปรากฏในหน้า Engineer Hub สำหรับตอบกลับและบรรจุขึ้น FAQ</p>
               </div>
             ) : (
               <form onSubmit={handleSubmitQuestion} className="space-y-3.5 text-xs">
@@ -640,8 +1194,8 @@ export const FaqKnowledgeHub: React.FC = () => {
                   </label>
                   <select
                     value={newCategory}
-                    onChange={e => setNewCategory(e.target.value)}
-                    className="w-full p-2.5 rounded-xl border border-slate-300 bg-white font-semibold text-slate-800 focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
+                    onChange={e => setNewCategory(e.target.value as FaqCategory)}
+                    className="w-full p-2.5 rounded-xl border border-slate-300 bg-white font-semibold text-slate-800 focus:ring-2 focus:ring-amber-500"
                   >
                     <option value="switching_power">การเลือกหม้อแปลง Switching 12V/24V</option>
                     <option value="dimming_driver">การเลือกหม้อแปลงดิม (DALI, 0-10V, Triac, Push-Dim)</option>
@@ -653,16 +1207,64 @@ export const FaqKnowledgeHub: React.FC = () => {
                   </select>
                 </div>
 
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block font-bold text-slate-800 mb-1">SO Number (ถ้ามี)</label>
+                    <input
+                      type="text"
+                      placeholder="เช่น SO-670123"
+                      value={newSoNumber}
+                      onChange={e => setNewSoNumber(e.target.value)}
+                      className="w-full p-2 rounded-xl border border-slate-300"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-800 mb-1">ชื่อโครงการ</label>
+                    <input
+                      type="text"
+                      placeholder="เช่น One Bangkok"
+                      value={newProjectName}
+                      onChange={e => setNewProjectName(e.target.value)}
+                      className="w-full p-2 rounded-xl border border-slate-300"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block font-bold text-slate-800 mb-1">ผู้ถาม (ฝ่ายขาย/ทีมงาน)</label>
+                    <input
+                      type="text"
+                      value={newSalesName}
+                      onChange={e => setNewSalesName(e.target.value)}
+                      className="w-full p-2 rounded-xl border border-slate-300 font-semibold"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-800 mb-1">วิศวกรที่ต้องการให้ตอบ</label>
+                    <select
+                      value={newEngineerName}
+                      onChange={e => setNewEngineerName(e.target.value)}
+                      className="w-full p-2 rounded-xl border border-slate-300 font-semibold bg-white"
+                    >
+                      <option value="พัด">ช่างพัด (หัวหน้าวิศวกร)</option>
+                      <option value="ชิน">ช่างชิน (วิศวกร)</option>
+                      <option value="เอิร์ธ">ช่างเอิร์ธ (วิศวกร)</option>
+                      <option value="พี">ช่างพี (วิศวกร)</option>
+                    </select>
+                  </div>
+                </div>
+
                 <div>
                   <label className="block font-bold text-slate-800 mb-1">
-                    หัวข้อคำถาม / สรุปอาการเสีย <span className="text-rose-500">*</span>
+                    หัวข้อคำถาม / สรุปประเด็นสงสัย <span className="text-rose-500">*</span>
                   </label>
                   <input
                     type="text"
-                    placeholder="เช่น โคมดาวน์ไลท์ DALI ในห้องประชุม Address หลุดบ่อย"
+                    placeholder="เช่น หม้อแปลงดิม 0-10V ต่อขนานกับสวิตช์ดิมเมอร์ 2 จุดได้หรือไม่?"
                     value={newQuestion}
                     onChange={e => setNewQuestion(e.target.value)}
-                    className="w-full p-2.5 rounded-xl border border-slate-300 font-semibold text-slate-900 focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
+                    className="w-full p-2.5 rounded-xl border border-slate-300 font-semibold text-slate-900 focus:ring-2 focus:ring-amber-500"
                     required
                   />
                 </div>
@@ -673,10 +1275,10 @@ export const FaqKnowledgeHub: React.FC = () => {
                   </label>
                   <textarea
                     rows={3}
-                    placeholder="ระบุรุ่น Driver, โครงการ, ความยาวสาย, หรืออาการที่พบเพิ่มเติม..."
+                    placeholder="ระบุรุ่น Driver, ระยะสาย, หรือรายละเอียดเพิ่มเติมเพื่อการตอบที่แม่นยำ..."
                     value={newDetail}
                     onChange={e => setNewDetail(e.target.value)}
-                    className="w-full p-2.5 rounded-xl border border-slate-300 text-slate-800 focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
+                    className="w-full p-2.5 rounded-xl border border-slate-300 text-slate-800 focus:ring-2 focus:ring-amber-500"
                   ></textarea>
                 </div>
 
@@ -686,7 +1288,7 @@ export const FaqKnowledgeHub: React.FC = () => {
                     className="flex-1 py-2.5 rounded-xl font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-md transition flex items-center justify-center gap-1.5 cursor-pointer"
                   >
                     <Send className="w-4 h-4" />
-                    ส่งคำถามไปยังฐานความรู้
+                    ส่งคำถามให้วิศวกรตอบ
                   </button>
                   <button
                     type="button"

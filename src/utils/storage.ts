@@ -1,11 +1,12 @@
-import { EEngineerRequest, StaffMember, EngineerInquiry, AuditLog, EngineerDailyAttendance } from '../types';
-import { INITIAL_REQUESTS, INITIAL_STAFF, INITIAL_INQUIRIES, INITIAL_ATTENDANCE } from '../data/initialData';
+import { EEngineerRequest, StaffMember, EngineerInquiry, AuditLog, EngineerDailyAttendance, FaqItem } from '../types';
+import { INITIAL_REQUESTS, INITIAL_STAFF, INITIAL_INQUIRIES, INITIAL_ATTENDANCE, INITIAL_FAQS } from '../data/initialData';
 
 const STORAGE_KEYS = {
   REQUESTS: 'lumencraft_e_engineer_requests_v1',
   STAFF: 'lumencraft_staff_members_v1',
   INQUIRIES: 'lumencraft_engineer_inquiries_v1',
   ATTENDANCE: 'lumencraft_engineer_attendance_v1',
+  FAQS: 'lumencraft_faqs_v1',
   LAST_DOC_INDEX: 'lumencraft_last_doc_index_v1',
 };
 
@@ -110,11 +111,44 @@ export const saveAttendance = (records: EngineerDailyAttendance[]) => {
 };
 export const saveStoredAttendance = saveAttendance;
 
+export const getStoredFaqs = (): FaqItem[] => {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.FAQS);
+    if (!raw) {
+      localStorage.setItem(STORAGE_KEYS.FAQS, JSON.stringify(INITIAL_FAQS));
+      return INITIAL_FAQS;
+    }
+    const parsed: FaqItem[] = JSON.parse(raw);
+    // Ensure all standard faqs are present if storage only has custom
+    const existingIds = new Set(parsed.map(f => f.id));
+    const merged = [...parsed];
+    INITIAL_FAQS.forEach(init => {
+      if (!existingIds.has(init.id)) {
+        merged.push(init);
+      }
+    });
+    return merged;
+  } catch (err) {
+    console.error('Error reading faqs from storage', err);
+    return INITIAL_FAQS;
+  }
+};
+
+export const saveFaqs = (faqs: FaqItem[]) => {
+  try {
+    localStorage.setItem(STORAGE_KEYS.FAQS, JSON.stringify(faqs));
+  } catch (err) {
+    console.error('Error saving faqs', err);
+  }
+};
+export const saveStoredFaqs = saveFaqs;
+
 export const resetToInitialData = () => {
   localStorage.setItem(STORAGE_KEYS.REQUESTS, JSON.stringify(INITIAL_REQUESTS));
   localStorage.setItem(STORAGE_KEYS.STAFF, JSON.stringify(INITIAL_STAFF));
   localStorage.setItem(STORAGE_KEYS.INQUIRIES, JSON.stringify(INITIAL_INQUIRIES));
   localStorage.setItem(STORAGE_KEYS.ATTENDANCE, JSON.stringify(INITIAL_ATTENDANCE));
+  localStorage.setItem(STORAGE_KEYS.FAQS, JSON.stringify(INITIAL_FAQS));
 };
 
 

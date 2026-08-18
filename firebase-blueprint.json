@@ -65,6 +65,24 @@
         "status": { "type": "string" }
       },
       "required": ["id", "engineerId", "date"]
+    },
+    "faqs": {
+      "title": "FaqItem",
+      "description": "Technical FAQ knowledge base articles and troubleshooting guides",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "category": { "type": "string" },
+        "categoryLabel": { "type": "string" },
+        "question": { "type": "string" },
+        "summary": { "type": "string" },
+        "steps": { "type": "array" },
+        "technicalTips": { "type": "string" },
+        "tags": { "type": "array" },
+        "authorName": { "type": "string" },
+        "isCustom": { "type": "boolean" }
+      },
+      "required": ["id", "category", "question", "summary"]
     }
   },
   "firestore": {
@@ -83,6 +101,10 @@
     "daily_attendance": {
       "schema": "daily_attendance",
       "description": "Engineer daily check-in/out records"
+    },
+    "faqs": {
+      "schema": "faqs",
+      "description": "Engineering FAQ knowledge base"
     }
   }
 }

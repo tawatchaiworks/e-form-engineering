@@ -2,6 +2,37 @@ export type Role = 'admin_sale' | 'sale' | 'engineer' | 'customer' | 'dashboard'
 
 export type Priority = 'alert_emergency' | 'alert_urgent' | 'alert_normal';
 
+export type FaqCategory = 
+  | 'switching_power' 
+  | 'dimming_driver' 
+  | 'cable_sizing' 
+  | 'strip_neonflex' 
+  | 'underwater' 
+  | 'garden_landscape' 
+  | 'dali_control' 
+  | 'troubleshooting' 
+  | 'general';
+
+export interface FaqItem {
+  id: string;
+  category: FaqCategory;
+  categoryLabel: string;
+  question: string;
+  summary: string;
+  steps?: string[];
+  technicalTips?: string;
+  commonCauses?: string[];
+  specsTable?: { label: string; value: string }[];
+  tags: string[];
+  authorName?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  isCustom?: boolean;
+  sourceInquiryId?: string;
+  inquiryReferenceId?: string;
+  upvotes?: number;
+}
+
 export type RequestStatus = 
   | 'draft'
   | 'pending_sale_sign'      // Admin submitted, waiting for Sale to sign & submit to Engineer
@@ -111,13 +142,18 @@ export interface EngineerInquiry {
   projectName: string;
   engineerName: string;
   salesName: string;
+  category?: FaqCategory;
   message: string;       // max 300
   createdAt: string;
   replyMessage?: string; // max 300
   replyAttachment?: string;
   replySignature?: string;
+  engineerSignatureUrl?: string;
   repliedAt?: string;
   status: 'pending' | 'replied';
+  forFaq?: boolean;
+  promotedToFaq?: boolean;
+  faqId?: string;
 }
 
 export interface EEngineerRequest {

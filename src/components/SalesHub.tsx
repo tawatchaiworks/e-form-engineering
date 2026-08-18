@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { 
   EEngineerRequest, StaffMember, EngineerInquiry, 
-  DigitalSignature, SalesEvaluation, AttachmentItem, WorkPhotoItem 
+  DigitalSignature, SalesEvaluation, AttachmentItem, WorkPhotoItem, FaqItem, FaqCategory 
 } from '../types';
 import { SignaturePad } from './SignaturePad';
 import { getDaysOverdue, isOneDayBefore, createAuditLog } from '../utils/storage';
@@ -20,6 +20,7 @@ interface SalesHubProps {
   requests: EEngineerRequest[];
   staff: StaffMember[];
   inquiries: EngineerInquiry[];
+  faqs?: FaqItem[];
   onUpdateRequest: (updated: EEngineerRequest) => void;
   onSendInquiry: (inquiry: EngineerInquiry) => void;
   onOpenCalendar: () => void;
@@ -31,6 +32,7 @@ export const SalesHub: React.FC<SalesHubProps> = ({
   requests,
   staff,
   inquiries,
+  faqs = [],
   onUpdateRequest,
   onSendInquiry,
   onOpenCalendar,
@@ -111,6 +113,8 @@ export const SalesHub: React.FC<SalesHubProps> = ({
   const [inquiryProjectName, setInquiryProjectName] = useState('');
   const [inquiryEngineer, setInquiryEngineer] = useState('พัด');
   const [inquirySalesName, setInquirySalesName] = useState('คุณกุ้ง');
+  const [inquiryCategory, setInquiryCategory] = useState<FaqCategory>('switching_power');
+  const [inquiryForFaq, setInquiryForFaq] = useState(true);
   const [inquiryMessage, setInquiryMessage] = useState('');
   const [inquirySuccessToast, setInquirySuccessToast] = useState(false);
 
@@ -387,6 +391,8 @@ export const SalesHub: React.FC<SalesHubProps> = ({
       projectName: inquiryProjectName.trim(),
       engineerName: inquiryEngineer,
       salesName: inquirySalesName,
+      category: inquiryCategory,
+      forFaq: inquiryForFaq,
       message: inquiryMessage.trim(),
       createdAt: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')} ${String(new Date().getHours()).padStart(2, '0')}:${String(new Date().getMinutes()).padStart(2, '0')}`,
       status: 'pending',
@@ -2051,11 +2057,14 @@ export const SalesHub: React.FC<SalesHubProps> = ({
               <MessageSquare className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-white">
-                กล่องสอบถามงาน Engineer (Direct Sales-to-Engineer Inquiry)
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <span>กล่องสอบถามงาน Engineer & เสนอหัวข้อ FAQ</span>
+                <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[10px] border border-amber-500/30">
+                  Direct Sales-to-Engineer & FAQ Pipeline
+                </span>
               </h3>
               <p className="text-xs text-slate-300">
-                ส่งคำถามเจาะจงถึงช่างรายบุคคล (พัด, โชค, วิน, วัฒน์) พร้อมข้อความจำกัด 300 ตัวอักษร
+                ส่งคำถามเจาะจงถึงช่างรายบุคคล (พัด, โชค, วิน, วัฒน์) พร้อมสามารถเลือกหมวดหมู่เพื่อบันทึกเป็นคลัง FAQ เพิ่มเติม
               </p>
             </div>
           </div>
@@ -2065,7 +2074,7 @@ export const SalesHub: React.FC<SalesHubProps> = ({
           {inquirySuccessToast && (
             <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold flex items-center gap-2">
               <Check className="w-4 h-4 text-emerald-600" />
-              ส่งข้อซักถามไปยังวิศวกรเรียบร้อยแล้ว (จะปรากฏในหน้า Engineer Hub ให้ช่างตอบกลับ)
+              ส่งข้อซักถามไปยังวิศวกรเรียบร้อยแล้ว (จะปรากฏในหน้า Engineer Hub ให้ช่างตอบกลับและบันทึกขึ้น FAQ)
             </div>
           )}
 
@@ -2133,6 +2142,41 @@ export const SalesHub: React.FC<SalesHubProps> = ({
               </select>
             </div>
 
+            {/* หมวดหมู่ FAQ ที่เกี่ยวข้อง */}
+            <div className="sm:col-span-2 lg:col-span-3">
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                หมวดหมู่เทคนิค (FAQ Technical Category):
+              </label>
+              <select
+                value={inquiryCategory}
+                onChange={e => setInquiryCategory(e.target.value as FaqCategory)}
+                className="w-full text-xs font-semibold px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-indigo-500 bg-white text-slate-800"
+              >
+                <option value="switching_power">⚡ การเลือกหม้อแปลง Switching 12V/24V</option>
+                <option value="dimming_driver">🎛️ การเลือกหม้อแปลงดิม (DALI, 0-10V, Triac, Push-Dim)</option>
+                <option value="cable_sizing">📏 การเลือกสายไฟ 24V และระยะสาย (Voltage Drop)</option>
+                <option value="strip_neonflex">✂️ การตัดต่อ LED Strip & Neon Flex</option>
+                <option value="underwater">🌊 โคมใต้น้ำ & การต่อสายไฟใต้น้ำ (IP68)</option>
+                <option value="garden_landscape">🌳 การติดตั้งโคมในสวน & ข้อจำกัด (IP67)</option>
+                <option value="dali_control">💻 ระบบ DALI & Automation Control</option>
+              </select>
+            </div>
+
+            {/* Checkbox for FAQ Promotion */}
+            <div className="sm:col-span-2 lg:col-span-1 flex items-end">
+              <label className="flex items-center gap-2 p-2 rounded-lg bg-amber-50 border border-amber-200 cursor-pointer text-xs w-full">
+                <input
+                  type="checkbox"
+                  checked={inquiryForFaq}
+                  onChange={e => setInquiryForFaq(e.target.checked)}
+                  className="rounded text-amber-600 focus:ring-amber-500 h-4 w-4"
+                />
+                <span className="font-bold text-amber-900 text-[11px] leading-tight">
+                  บันทึกเป็น FAQ หลังช่างตอบ 🌟
+                </span>
+              </label>
+            </div>
+
             <div className="sm:col-span-2 lg:col-span-4">
               <div className="flex items-center justify-between mb-1">
                 <label className="text-xs font-bold text-slate-700">
@@ -2145,7 +2189,7 @@ export const SalesHub: React.FC<SalesHubProps> = ({
               <textarea
                 rows={2}
                 maxLength={300}
-                placeholder="พิมพ์ข้อคำถามที่ต้องการให้วิศวกรตรวจสอบหรืออัปเดตสถานะ..."
+                placeholder="พิมพ์ข้อคำถามที่ต้องการให้วิศวกรตรวจสอบ ตอบกลับ และนำไปบันทึกเป็น FAQ..."
                 value={inquiryMessage}
                 onChange={e => {
                   if (e.target.value.length <= 300) {
@@ -2160,7 +2204,7 @@ export const SalesHub: React.FC<SalesHubProps> = ({
             <div className="sm:col-span-2 lg:col-span-4 flex justify-end">
               <button
                 type="submit"
-                className="px-6 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow transition flex items-center gap-1.5"
+                className="px-6 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow transition flex items-center gap-1.5 cursor-pointer"
               >
                 <Send className="w-3.5 h-3.5" />
                 ส่งคำถามถึงช่าง{inquiryEngineer}
@@ -2172,16 +2216,38 @@ export const SalesHub: React.FC<SalesHubProps> = ({
           {/* Inquiries History List */}
           {inquiries.length > 0 && (
             <div className="space-y-3 pt-4 border-t border-slate-200">
-              <h4 className="text-xs font-bold text-slate-700">
-                ประวัติข้อซักถามและการตอบกลับล่าสุด:
-              </h4>
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-bold text-slate-700">
+                  ประวัติข้อซักถามและการตอบกลับล่าสุด ({inquiries.length} รายการ):
+                </h4>
+                <span className="text-[11px] text-slate-400">
+                  คำถามที่มีเครื่องหมาย 🌟 จะถูกนำไปบรรจุใน FAQ หลังช่างตอบ
+                </span>
+              </div>
+              
               <div className="space-y-2.5">
                 {inquiries.map(inq => (
                   <div key={inq.id} className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-2 text-xs">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
                       <div className="flex items-center gap-2">
                         <span className="font-black text-indigo-700">{inq.soNumber}</span>
                         <span className="font-semibold text-slate-800">{inq.projectName}</span>
+                        {inq.category && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-200 text-slate-700 font-bold">
+                            {inq.category === 'switching_power' ? 'หม้อแปลง Switching' :
+                             inq.category === 'dimming_driver' ? 'หม้อแปลงดิม' :
+                             inq.category === 'cable_sizing' ? 'สายไฟ 24V' :
+                             inq.category === 'strip_neonflex' ? 'ตัดต่อ Strip/Neon' :
+                             inq.category === 'underwater' ? 'โคมใต้น้ำ IP68' :
+                             inq.category === 'garden_landscape' ? 'โคมในสวน IP67' : 'ระบบ DALI'}
+                          </span>
+                        )}
+                        {inq.promotedToFaq && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 font-black flex items-center gap-1">
+                            <Sparkles className="w-3 h-3 text-amber-600" />
+                            บรรจุขึ้น FAQ แล้ว
+                          </span>
+                        )}
                       </div>
                       <span className="text-[10px] text-slate-400">{inq.createdAt}</span>
                     </div>
@@ -2193,14 +2259,17 @@ export const SalesHub: React.FC<SalesHubProps> = ({
                     {inq.status === 'replied' ? (
                       <div className="text-emerald-900 bg-emerald-50 p-2.5 rounded-lg border border-emerald-200 space-y-1">
                         <div className="flex items-center justify-between text-[11px] font-bold text-emerald-800">
-                          <span>ช่าง{inq.engineerName} ตอบกลับ:</span>
-                          <span className="text-emerald-600">{inq.repliedAt}</span>
+                          <span className="flex items-center gap-1.5">
+                            <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
+                            ช่าง{inq.engineerName} ตอบกลับแล้ว:
+                          </span>
+                          <span className="text-emerald-600 font-mono">{inq.repliedAt}</span>
                         </div>
-                        <p>{inq.replyMessage}</p>
+                        <p className="leading-relaxed">{inq.replyMessage}</p>
                       </div>
                     ) : (
                       <div className="text-[11px] text-amber-600 font-medium flex items-center gap-1">
-                        <Clock className="w-3 h-3" /> กำลังรอช่าง{inq.engineerName} ตอบกลับใน Engineer Hub
+                        <Clock className="w-3 h-3" /> กำลังรอช่าง{inq.engineerName} ตรวจสอบและตอบกลับใน Engineer Hub
                       </div>
                     )}
                   </div>

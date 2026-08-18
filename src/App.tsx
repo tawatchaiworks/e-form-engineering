@@ -4,9 +4,10 @@ import {
   getStoredStaff, saveStoredStaff,
   getStoredInquiries, saveStoredInquiries,
   getStoredAttendance, saveStoredAttendance,
+  getStoredFaqs, saveStoredFaqs,
   getDaysOverdue
 } from './utils/storage';
-import { EEngineerRequest, StaffMember, EngineerInquiry, Role, EngineerDailyAttendance } from './types';
+import { EEngineerRequest, StaffMember, EngineerInquiry, Role, EngineerDailyAttendance, FaqItem } from './types';
 import { CompanyHeader } from './components/CompanyHeader';
 import { AdminSaleForm } from './components/AdminSaleForm';
 import { SalesHub } from './components/SalesHub';
@@ -31,6 +32,9 @@ import {
   syncInquiryToFirestore, 
   syncAttendanceToFirestore, 
   deleteStaffFromFirestore,
+  syncFaqToFirestore,
+  syncAllFaqsToFirestore,
+  deleteFaqFromFirestore,
   testFirestoreConnection
 } from './lib/firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
@@ -41,6 +45,7 @@ export const App: React.FC = () => {
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [inquiries, setInquiries] = useState<EngineerInquiry[]>([]);
   const [attendance, setAttendance] = useState<EngineerDailyAttendance[]>([]);
+  const [faqs, setFaqs] = useState<FaqItem[]>([]);
 
   // Firebase Auth state
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -77,6 +82,7 @@ export const App: React.FC = () => {
     setStaff(loadedStaff);
     setInquiries(loadedInquiries);
     setAttendance(loadedAttendance);
+    setFaqs(getStoredFaqs());
 
     // Setup Firestore Listeners for real-time live synchronization
     try {
@@ -139,11 +145,30 @@ export const App: React.FC = () => {
         console.warn('Firestore attendance listener error:', err);
       });
 
+      const unsubFaqs = onSnapshot(collection(db, COLLECTIONS.FAQS), snapshot => {
+        if (!snapshot.empty) {
+          const cloudFaqs: FaqItem[] = [];
+          snapshot.forEach(doc => {
+            cloudFaqs.push(doc.data() as FaqItem);
+          });
+          setFaqs(cloudFaqs);
+          saveStoredFaqs(cloudFaqs);
+        } else {
+          const initFaqs = getStoredFaqs();
+          if (initFaqs.length > 0) {
+            syncAllFaqsToFirestore(initFaqs);
+          }
+        }
+      }, err => {
+        console.warn('Firestore faqs listener error:', err);
+      });
+
       return () => {
         unsubRequests();
         unsubStaff();
         unsubInquiries();
         unsubAttendance();
+        unsubFaqs();
       };
     } catch (e) {
       console.error('Error connecting to Firestore:', e);
@@ -218,6 +243,60 @@ export const App: React.FC = () => {
     setStaff(updated);
     saveStoredStaff(updated);
     deleteStaffFromFirestore(id);
+  };
+
+  // FAQ CRUD & Promote handlers
+  const handleAddFaq = (newFaq: FaqItem) => {
+    const updated = [newFaq, ...faqs.filter(f => f.id !== newFaq.id)];
+    setFaqs(updated);
+    saveStoredFaqs(updated);
+    syncFaqToFirestore(newFaq);
+  };
+
+  const handleUpdateFaq = (updatedFaq: FaqItem) => {
+    const updated = faqs.map(f => f.id === updatedFaq.id ? updatedFaq : f);
+    setFaqs(updated);
+    saveStoredFaqs(updated);
+    syncFaqToFirestore(updatedFaq);
+  };
+
+  const handleDeleteFaq = (faqId: string) => {
+    const updated = faqs.filter(f => f.id !== faqId);
+    setFaqs(updated);
+    saveStoredFaqs(updated);
+    deleteFaqFromFirestore(faqId);
+  };
+
+  const handlePromoteInquiryToFaq = (inquiry: EngineerInquiry, faqPayload: Partial<FaqItem>) => {
+    const newFaqId = `faq-inq-${Date.now()}`;
+    const newFaq: FaqItem = {
+      id: newFaqId,
+      category: (faqPayload.category as any) || inquiry.category || 'switching_power',
+      categoryLabel: faqPayload.categoryLabel || 'คำถามจากฝ่ายขาย & ประเด็นหน้างาน',
+      question: faqPayload.question || inquiry.message,
+      summary: faqPayload.summary || inquiry.replyMessage || '',
+      steps: faqPayload.steps || (inquiry.replyMessage ? [inquiry.replyMessage] : []),
+      technicalTips: faqPayload.technicalTips || `คำถามจากคุณ ${inquiry.salesName} (โครงการ ${inquiry.projectName} / ${inquiry.soNumber}) ได้รับการตอบและตรวจสอบโดยวิศวกร ${inquiry.engineerName}`,
+      tags: faqPayload.tags || ['จากคำถามฝ่ายขาย', inquiry.soNumber, inquiry.projectName, inquiry.engineerName].filter(Boolean),
+      authorName: `ช่าง${inquiry.engineerName}`,
+      isCustom: true,
+      inquiryReferenceId: inquiry.id,
+    };
+
+    // 1. Add to FAQ
+    handleAddFaq(newFaq);
+
+    // 2. Mark inquiry as promoted
+    const updatedInquiries = inquiries.map(i => {
+      if (i.id === inquiry.id) {
+        const item = { ...i, promotedToFaq: true, faqId: newFaqId };
+        syncInquiryToFirestore(item);
+        return item;
+      }
+      return i;
+    });
+    setInquiries(updatedInquiries);
+    saveStoredInquiries(updatedInquiries);
   };
 
   // Attendance handlers (Check-in, Check-out, Live Daily tracking)
@@ -323,6 +402,7 @@ export const App: React.FC = () => {
             requests={requests}
             staff={staff}
             inquiries={inquiries}
+            faqs={faqs}
             onUpdateRequest={handleUpdateRequest}
             onSendInquiry={handleSendInquiry}
             onOpenCalendar={() => setIsCalendarOpen(true)}
@@ -336,8 +416,11 @@ export const App: React.FC = () => {
             requests={requests}
             staff={staff}
             inquiries={inquiries}
+            faqs={faqs}
             onUpdateRequest={handleUpdateRequest}
             onReplyInquiry={handleReplyInquiry}
+            onPromoteInquiryToFaq={handlePromoteInquiryToFaq}
+            onAddFaq={handleAddFaq}
             onOpenCalendar={() => setIsCalendarOpen(true)}
             onOpenStatus={() => setIsStatusOpen(true)}
             onOpenLocation={() => setIsLocationOpen(true)}
@@ -377,7 +460,17 @@ export const App: React.FC = () => {
         )}
 
         {currentRole === 'faq' && (
-          <FaqKnowledgeHub />
+          <FaqKnowledgeHub
+            faqs={faqs}
+            inquiries={inquiries}
+            staff={staff}
+            onAddFaq={handleAddFaq}
+            onUpdateFaq={handleUpdateFaq}
+            onDeleteFaq={handleDeleteFaq}
+            onSendInquiry={handleSendInquiry}
+            onReplyInquiry={handleReplyInquiry}
+            onPromoteInquiryToFaq={handlePromoteInquiryToFaq}
+          />
         )}
 
       </main>

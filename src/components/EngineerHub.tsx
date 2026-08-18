@@ -9,7 +9,7 @@ import {
   ChevronRight, History, Layers, CheckCheck, RefreshCw
 } from 'lucide-react';
 import { 
-  EEngineerRequest, StaffMember, EngineerInquiry, CheckInData, AttachmentItem, WorkPhotoItem 
+  EEngineerRequest, StaffMember, EngineerInquiry, CheckInData, AttachmentItem, WorkPhotoItem, FaqItem, FaqCategory 
 } from '../types';
 import { SignaturePad } from './SignaturePad';
 import { createAuditLog } from '../utils/storage';
@@ -22,8 +22,11 @@ interface EngineerHubProps {
   requests: EEngineerRequest[];
   staff: StaffMember[];
   inquiries: EngineerInquiry[];
+  faqs?: FaqItem[];
   onUpdateRequest: (updated: EEngineerRequest) => void;
   onReplyInquiry: (inquiryId: string, replyMessage: string, signatureUrl: string) => void;
+  onPromoteInquiryToFaq?: (inquiry: EngineerInquiry, faqPayload: Partial<FaqItem>) => void;
+  onAddFaq?: (faq: FaqItem) => void;
   onOpenCalendar: () => void;
   onOpenStatus: () => void;
   onOpenLocation: () => void;
@@ -33,8 +36,11 @@ export const EngineerHub: React.FC<EngineerHubProps> = ({
   requests,
   staff,
   inquiries,
+  faqs = [],
   onUpdateRequest,
   onReplyInquiry,
+  onPromoteInquiryToFaq,
+  onAddFaq,
   onOpenCalendar,
   onOpenStatus,
   onOpenLocation,
@@ -144,6 +150,76 @@ export const EngineerHub: React.FC<EngineerHubProps> = ({
   // Inquiries Reply state
   const [replyingInquiryId, setReplyingInquiryId] = useState<string | null>(null);
   const [replyMessage, setReplyMessage] = useState<string>('');
+
+  // Promote to FAQ Modal state
+  const [promotingInquiry, setPromotingInquiry] = useState<EngineerInquiry | null>(null);
+  const [promoteCategory, setPromoteCategory] = useState<FaqCategory>('switching_power');
+  const [promoteQuestion, setPromoteQuestion] = useState<string>('');
+  const [promoteSummary, setPromoteSummary] = useState<string>('');
+  const [promoteStepsText, setPromoteStepsText] = useState<string>('');
+  const [promoteTips, setPromoteTips] = useState<string>('');
+  const [promoteTagsText, setPromoteTagsText] = useState<string>('');
+  const [promoteSuccessToast, setPromoteSuccessToast] = useState<boolean>(false);
+
+  // Helper to open promote modal
+  const handleOpenPromoteModal = (inq: EngineerInquiry) => {
+    setPromotingInquiry(inq);
+    setPromoteCategory(inq.category || 'switching_power');
+    setPromoteQuestion(inq.message);
+    setPromoteSummary(inq.replyMessage || '');
+    setPromoteStepsText(inq.replyMessage ? `1. ตรวจสอบหน้างานและรุ่นอุปกรณ์\n2. ${inq.replyMessage}` : '');
+    setPromoteTips(`คำถามจากโครงการ ${inquirySoNumber(inq)} โดยคุณ ${inq.salesName} ตอบและตรวจสอบโดยช่าง ${inq.engineerName}`);
+    setPromoteTagsText(['หน้างานจริง', inq.soNumber, inq.projectName, inq.engineerName].filter(Boolean).join(', '));
+  };
+
+  const inquirySoNumber = (inq: EngineerInquiry) => inq.soNumber || inq.projectName || '';
+
+  const handleConfirmPromoteToFaq = () => {
+    if (!promotingInquiry) return;
+    if (!promoteQuestion.trim() || !promoteSummary.trim()) {
+      alert('กรุณาระบุคำถามและคำตอบ/สรุปแนวทางแก้ไข');
+      return;
+    }
+
+    const steps = promoteStepsText
+      .split('\n')
+      .map(s => s.trim())
+      .filter(s => s.length > 0);
+
+    const tags = promoteTagsText
+      .split(',')
+      .map(t => t.trim())
+      .filter(t => t.length > 0);
+
+    const categoryLabels: Record<FaqCategory, string> = {
+      switching_power: 'การเลือกหม้อแปลง Switching',
+      dimming_driver: 'การเลือกหม้อแปลงดิม',
+      cable_sizing: 'การเลือกสายไฟ 24V & ระยะสาย',
+      strip_neonflex: 'การตัดต่อ Strip & Neon Flex',
+      underwater: 'โคมใต้น้ำ & การต่อสายใต้น้ำ',
+      garden_landscape: 'การติดตั้งโคมในสวน & ข้อจำกัด',
+      dali_control: 'ระบบ DALI & Control',
+      troubleshooting: 'การแก้ปัญหาและอาการเสียหน้างาน',
+      general: 'เทคนิคไฟฟ้าทั่วไป',
+    };
+
+    if (onPromoteInquiryToFaq) {
+      onPromoteInquiryToFaq(promotingInquiry, {
+        category: promoteCategory,
+        categoryLabel: categoryLabels[promoteCategory] || 'เทคนิคหน้างาน',
+        question: promoteQuestion.trim(),
+        summary: promoteSummary.trim(),
+        steps: steps.length > 0 ? steps : [promoteSummary.trim()],
+        technicalTips: promoteTips.trim(),
+        tags: tags.length > 0 ? tags : ['จากคำถามฝ่ายขาย'],
+        authorName: `ช่าง${promotingInquiry.engineerName}`,
+      });
+    }
+
+    setPromotingInquiry(null);
+    setPromoteSuccessToast(true);
+    setTimeout(() => setPromoteSuccessToast(false), 4000);
+  };
 
   // Tab & Search states for engineer jobs view
   const [activeJobTab, setActiveJobTab] = useState<'all' | 'pending' | 'in_progress' | 'completed' | 'inquiries'>('all');
@@ -2211,12 +2287,37 @@ export const EngineerHub: React.FC<EngineerHubProps> = ({
                   </div>
 
                   {inq.status === 'replied' ? (
-                    <div className="bg-emerald-50 p-3 rounded-lg border border-emerald-200 text-emerald-900 space-y-1">
+                    <div className="bg-emerald-50 p-3.5 rounded-xl border border-emerald-200 text-emerald-900 space-y-2.5">
                       <div className="flex items-center justify-between text-[11px] font-bold">
-                        <span>ช่าง{inq.engineerName} ได้ตอบกลับแล้ว:</span>
-                        <span>{inq.repliedAt}</span>
+                        <span className="flex items-center gap-1.5 text-emerald-800">
+                          <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
+                          ช่าง{inq.engineerName} ได้ตอบกลับแล้ว:
+                        </span>
+                        <span className="font-mono text-emerald-700">{inq.repliedAt}</span>
                       </div>
-                      <p>{inq.replyMessage}</p>
+                      <p className="leading-relaxed bg-white/70 p-2 rounded-lg border border-emerald-100">{inq.replyMessage}</p>
+                      
+                      {/* Promote to FAQ action */}
+                      <div className="flex items-center justify-between pt-1 border-t border-emerald-200/60">
+                        {inq.promotedToFaq ? (
+                          <span className="text-[11px] font-bold text-amber-800 bg-amber-100 px-2.5 py-1 rounded-full border border-amber-300 flex items-center gap-1">
+                            <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                            บันทึกเป็น FAQ ประจำระบบแล้ว
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenPromoteModal(inq)}
+                            className="px-3 py-1.5 rounded-lg text-[11px] font-bold bg-amber-500 hover:bg-amber-600 text-slate-950 shadow-xs flex items-center gap-1.5 cursor-pointer transition"
+                          >
+                            <Sparkles className="w-3.5 h-3.5" />
+                            <span>✨ บันทึกคำถาม-คำตอบนี้เป็น FAQ ประจำบริษัท</span>
+                          </button>
+                        )}
+                        <span className="text-[10px] text-slate-400">
+                          {inq.forFaq ? 'ฝ่ายขายเสนอเป็นหัวข้อ FAQ' : 'คำถามเจาะจงหน้างาน'}
+                        </span>
+                      </div>
                     </div>
                   ) : replyingInquiryId === inq.id ? (
                     <div className="space-y-3 pt-2 border-t border-slate-200">
@@ -2262,12 +2363,20 @@ export const EngineerHub: React.FC<EngineerHubProps> = ({
                       </div>
                     </div>
                   ) : (
-                    <button
-                      onClick={() => setReplyingInquiryId(inq.id)}
-                      className="px-4 py-2 rounded-lg font-bold bg-amber-600 hover:bg-amber-500 text-white shadow-sm transition"
-                    >
-                      ตอบกลับข้อซักถามนี้ (พร้อมลงนามดิจิทัล)
-                    </button>
+                    <div className="flex items-center justify-between pt-1">
+                      <button
+                        onClick={() => setReplyingInquiryId(inq.id)}
+                        className="px-4 py-2 rounded-lg font-bold bg-amber-600 hover:bg-amber-500 text-white shadow-sm transition flex items-center gap-1.5"
+                      >
+                        <PenTool className="w-3.5 h-3.5" />
+                        <span>ตอบกลับข้อซักถามนี้ (พร้อมลงนามดิจิทัล)</span>
+                      </button>
+                      {inq.forFaq && (
+                        <span className="text-[10px] text-amber-600 font-bold bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+                          ⭐ เซลล์ร้องขอให้นำขึ้น FAQ
+                        </span>
+                      )}
+                    </div>
                   )}
                 </div>
               ))}
@@ -2591,6 +2700,141 @@ export const EngineerHub: React.FC<EngineerHubProps> = ({
           setIsAcceptCalendarOpen(false);
         }}
       />
+
+      {/* Promote to FAQ Modal */}
+      {promotingInquiry && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-2xl max-h-[92vh] flex flex-col overflow-hidden">
+            <div className="bg-gradient-to-r from-amber-600 to-amber-700 text-white p-4 sm:p-5 flex items-center justify-between shrink-0">
+              <div className="flex items-center space-x-3">
+                <div className="p-2.5 rounded-xl bg-white/20 text-white">
+                  <Sparkles className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-base sm:text-lg font-bold text-white">
+                    บันทึกขึ้นคลัง FAQ ความรู้ช่าง & วิศวกรรม
+                  </h3>
+                  <p className="text-xs text-amber-100">
+                    แปลงคำถามจากฝ่ายขาย ({promotingInquiry.salesName}) เป็นองค์ความรู้มาตรฐานประจำบริษัท
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setPromotingInquiry(null)}
+                className="p-2 rounded-xl text-white/80 hover:text-white hover:bg-white/10 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-5 overflow-y-auto flex-1 space-y-4 text-xs">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  หมวดหมู่ความรู้ (FAQ Category) <span className="text-rose-500">*</span>
+                </label>
+                <select
+                  value={promoteCategory}
+                  onChange={e => setPromoteCategory(e.target.value as FaqCategory)}
+                  className="w-full text-xs font-semibold px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-amber-500 bg-white"
+                >
+                  <option value="switching_power">⚡ การเลือกหม้อแปลง Switching 12V/24V</option>
+                  <option value="dimming_driver">🎛️ การเลือกหม้อแปลงดิม (DALI, 0-10V, Triac, Push-Dim)</option>
+                  <option value="cable_sizing">📏 การเลือกสายไฟ 24V และระยะสาย (Voltage Drop)</option>
+                  <option value="strip_neonflex">✂️ การตัดต่อ LED Strip & Neon Flex</option>
+                  <option value="underwater">🌊 โคมใต้น้ำ & การต่อสายไฟใต้น้ำ (IP68)</option>
+                  <option value="garden_landscape">🌳 การติดตั้งโคมในสวน & ข้อจำกัด (IP67)</option>
+                  <option value="dali_control">💻 ระบบ DALI & Automation Control</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  หัวข้อคำถาม (Question) <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={promoteQuestion}
+                  onChange={e => setPromoteQuestion(e.target.value)}
+                  className="w-full text-xs font-semibold px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-amber-500"
+                  placeholder="เช่น สาย 24V ลากยาว 15 เมตร ต้องใช้สายขนาดกี่ sq.mm?"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  คำตอบ / ข้อสรุปทางเทคนิค (Summary Answer) <span className="text-rose-500">*</span>
+                </label>
+                <textarea
+                  rows={3}
+                  value={promoteSummary}
+                  onChange={e => setPromoteSummary(e.target.value)}
+                  className="w-full text-xs p-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-amber-500"
+                  placeholder="สรุปคำตอบทางเทคนิคที่เข้าใจง่าย สำหรับให้ทีมขายและวิศวกรอ่าน..."
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  ขั้นตอนการคำนวณ / วิธีการแก้ไข (1 บรรทัด = 1 ขั้นตอน)
+                </label>
+                <textarea
+                  rows={3}
+                  value={promoteStepsText}
+                  onChange={e => setPromoteStepsText(e.target.value)}
+                  className="w-full text-xs p-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-amber-500 font-mono text-[11px]"
+                  placeholder="1. คำนวณวัตต์รวมทั้งหมด&#10;2. คำนวณกระแส Amp&#10;3. เผื่อ Voltage drop ไม่เกิน 5%"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  ข้อควรระวัง / เทคนิคหน้างาน (Technical Tips & Warnings)
+                </label>
+                <textarea
+                  rows={2}
+                  value={promoteTips}
+                  onChange={e => setPromoteTips(e.target.value)}
+                  className="w-full text-xs p-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-amber-500"
+                  placeholder="ข้อควรระวังสำคัญหน้างาน..."
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  แท็กคำค้นหา (คั่นด้วยเครื่องหมายจุลภาค ,)
+                </label>
+                <input
+                  type="text"
+                  value={promoteTagsText}
+                  onChange={e => setPromoteTagsText(e.target.value)}
+                  className="w-full text-xs px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-amber-500"
+                  placeholder="สายไฟ, 24V, voltage drop, switching"
+                />
+              </div>
+            </div>
+
+            <div className="p-4 bg-slate-100 border-t border-slate-200 flex items-center justify-between shrink-0">
+              <button
+                type="button"
+                onClick={() => setPromotingInquiry(null)}
+                className="px-4 py-2 rounded-xl text-xs font-bold bg-white text-slate-700 border border-slate-300 hover:bg-slate-200"
+              >
+                ยกเลิก
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmPromoteToFaq}
+                className="px-5 py-2 rounded-xl text-xs font-bold bg-amber-600 hover:bg-amber-500 text-white shadow-md flex items-center gap-1.5 cursor-pointer"
+              >
+                <Check className="w-4 h-4" />
+                <span>บันทึกลงคลัง FAQ ประจำบริษัททันที</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
