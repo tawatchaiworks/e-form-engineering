@@ -123,6 +123,7 @@ export const EngineerHub: React.FC<EngineerHubProps> = ({
 
   // Reschedule modal state
   const [reschedulingId, setReschedulingId] = useState<string | null>(null);
+  const [rescheduleEngineer, setRescheduleEngineer] = useState<string>('พัด');
   const [rescheduleDate, setRescheduleDate] = useState<string>('');
   const [rescheduleReason, setRescheduleReason] = useState<string>('');
   const [sitePrepNote, setSitePrepNote] = useState<string>('');
@@ -291,17 +292,27 @@ export const EngineerHub: React.FC<EngineerHubProps> = ({
 
   // Action: Propose Reschedule
   const handleConfirmReschedule = (req: EEngineerRequest) => {
+    const engineerName = rescheduleEngineer.trim() || req.assignedEngineer || chosenEngineer || 'พัด';
+
+    if (!engineerName) {
+      alert('กรุณาระบุชื่อวิศวกรผู้ขอเลื่อนวันนัด');
+      return;
+    }
     if (!rescheduleDate) {
       alert('กรุณาเลือกวันนัดหมายใหม่ที่เสนอ');
       return;
     }
+    if (!rescheduleReason.trim()) {
+      alert('กรุณาระบุเหตุผลในการขอเลื่อนวันนัด');
+      return;
+    }
 
     const timeStr = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')} ${String(new Date().getHours()).padStart(2, '0')}:${String(new Date().getMinutes()).padStart(2, '0')}`;
-    const engineerName = req.assignedEngineer || chosenEngineer;
 
     const updated: EEngineerRequest = {
       ...req,
       status: 'engineer_rescheduled',
+      engineerRescheduledBy: engineerName,
       engineerRescheduleDate: rescheduleDate,
       engineerRescheduleReason: rescheduleReason.trim(),
       engineerSitePreparation: sitePrepNote.trim(),
@@ -309,9 +320,9 @@ export const EngineerHub: React.FC<EngineerHubProps> = ({
         ...req.history,
         createAuditLog(
           'วิศวกรขอเลื่อนวันนัด',
-          engineerName,
+          `ช่าง${engineerName}`,
           'Engineer',
-          `เสนอวันใหม่ ${rescheduleDate} (เหตุผล: ${rescheduleReason || '-'})`
+          `ช่าง${engineerName} ขอเลื่อนนัดเป็นวันใหม่ ${rescheduleDate} (เหตุผล: ${rescheduleReason.trim()})`
         )
       ],
       updatedAt: timeStr,
@@ -1506,51 +1517,114 @@ export const EngineerHub: React.FC<EngineerHubProps> = ({
                     </div>
                   </div>
                 ) : reschedulingId === req.id ? (
-                  <div className="p-3.5 bg-sky-50 rounded-xl border border-sky-200 space-y-3">
-                    <h5 className="text-xs font-bold text-sky-800">
-                      เสนอเลื่อนวันนัดหมาย (Reschedule):
-                    </h5>
-                    <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="p-4 bg-sky-50/90 rounded-2xl border-2 border-sky-300 space-y-3.5 shadow-sm">
+                    <div className="flex items-center justify-between pb-2 border-b border-sky-200">
+                      <h5 className="text-xs sm:text-sm font-bold text-sky-900 flex items-center gap-1.5">
+                        <Calendar className="w-4 h-4 text-sky-600" />
+                        <span>เสนอเลื่อนวันนัดหมาย (Engineer Reschedule Request)</span>
+                      </h5>
+                      <span className="text-[11px] font-bold text-sky-700 bg-sky-100 px-2 py-0.5 rounded-full border border-sky-200">
+                        SO: {req.soNumber}
+                      </span>
+                    </div>
+
+                    {/* Engineer Selection (ระบุชื่อ Engineer ที่ขอเลื่อน) */}
+                    <div className="bg-white p-3 rounded-xl border border-sky-200 space-y-2">
+                      <label className="block text-xs font-bold text-slate-800 flex items-center justify-between">
+                        <span className="flex items-center gap-1">
+                          <UserCheck className="w-3.5 h-3.5 text-sky-600" />
+                          <span>ระบุชื่อวิศวกรผู้ขอเลื่อน (Engineer Name) * :</span>
+                        </span>
+                        <span className="text-[10px] text-amber-600 font-semibold">* จำเป็นต้องระบุชื่อช่าง</span>
+                      </label>
+                      
+                      {/* Quick Selector Pills for standard Engineers */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                        {engineers.map(eng => {
+                          const isSelected = rescheduleEngineer === eng.name;
+                          return (
+                            <button
+                              key={eng.id}
+                              type="button"
+                              onClick={() => setRescheduleEngineer(eng.name)}
+                              className={`py-1.5 px-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1 border ${
+                                isSelected
+                                  ? 'bg-sky-600 text-white border-sky-600 shadow-2xs'
+                                  : 'bg-slate-50 hover:bg-sky-50 text-slate-700 border-slate-200'
+                              }`}
+                            >
+                              <span>ช่าง{eng.name}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {/* Custom input or auto-sync */}
+                      <div className="flex items-center gap-2 pt-1">
+                        <span className="text-[11px] text-slate-500 font-medium shrink-0">หรือพิมพ์ชื่อช่าง:</span>
+                        <input
+                          type="text"
+                          value={rescheduleEngineer}
+                          onChange={e => setRescheduleEngineer(e.target.value)}
+                          placeholder="เช่น ช่างพัด, ช่างโชค..."
+                          className="flex-1 text-xs p-1.5 px-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-sky-400 bg-slate-50 focus:bg-white"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                       <div>
-                        <label className="block font-bold text-slate-700 mb-1">เสนอวันเข้าใหม่:</label>
+                        <label className="block font-bold text-slate-800 mb-1">
+                          📅 เสนอวันนัดหมายใหม่ (Proposed Date) * :
+                        </label>
                         <input
                           type="date"
                           value={rescheduleDate}
                           onChange={e => setRescheduleDate(e.target.value)}
-                          className="w-full p-2 rounded-lg border border-slate-300 text-xs"
+                          className="w-full p-2.5 rounded-xl border border-sky-300 text-xs font-semibold focus:ring-2 focus:ring-sky-500 bg-white"
                         />
                       </div>
                       <div>
-                        <label className="block font-bold text-slate-700 mb-1">สิ่งที่หน้างานต้องเตรียม:</label>
+                        <label className="block font-bold text-slate-800 mb-1">
+                          🔧 สิ่งที่หน้างานต้องจัดเตรียมเพิ่มเติม:
+                        </label>
                         <input
                           type="text"
                           value={sitePrepNote}
                           onChange={e => setSitePrepNote(e.target.value)}
-                          placeholder="เช่น เปิดระบบไฟ, บัตร Work Permit"
-                          className="w-full p-2 rounded-lg border border-slate-300 text-xs"
+                          placeholder="เช่น เปิดไฟเมน, เตรียมบันได, บัตร Work Permit"
+                          className="w-full p-2.5 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-sky-500 bg-white"
                         />
                       </div>
                     </div>
+
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">เหตุผลการขอเลื่อน:</label>
+                      <label className="block text-xs font-bold text-slate-800 mb-1 flex items-center justify-between">
+                        <span>⚠️ ระบุเหตุผลการขอเลื่อนวันนัด * :</span>
+                        <span className="text-[10px] text-slate-400">ชัดเจนเพื่อให้ฝ่ายขายชี้แจงลูกค้าได้</span>
+                      </label>
                       <input
                         type="text"
                         value={rescheduleReason}
                         onChange={e => setRescheduleReason(e.target.value)}
-                        placeholder="เช่น ติดงานโปรเจกต์เดิม..."
-                        className="w-full text-xs p-2 rounded-lg border border-slate-300"
+                        placeholder="เช่น ติดงานโปรเจกต์เดิมยังไม่แล้วเสร็จ, รอชิ้นส่วนอะไหล่, หน้างานยังไม่พร้อมติดตั้ง..."
+                        className="w-full text-xs p-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-sky-500 bg-white"
                       />
                     </div>
-                    <div className="flex gap-2">
+
+                    <div className="flex gap-2 pt-1">
                       <button
+                        type="button"
                         onClick={() => handleConfirmReschedule(req)}
-                        className="flex-1 py-2 rounded-lg text-xs font-bold bg-sky-600 hover:bg-sky-500 text-white shadow"
+                        className="flex-1 py-2.5 rounded-xl text-xs font-bold bg-sky-600 hover:bg-sky-500 text-white shadow-md flex items-center justify-center gap-1.5 transition"
                       >
-                        ส่งข้อเสนอวันใหม่ให้ฝ่ายขาย
+                        <Send className="w-3.5 h-3.5" />
+                        <span>ยืนยันเสนอเลื่อนวัน (โดย ช่าง{rescheduleEngineer || 'วิศวกร'})</span>
                       </button>
                       <button
+                        type="button"
                         onClick={() => setReschedulingId(null)}
-                        className="px-3 py-2 rounded-lg text-xs font-bold bg-slate-200 text-slate-700"
+                        className="px-4 py-2.5 rounded-xl text-xs font-bold bg-slate-200 hover:bg-slate-300 text-slate-700 transition"
                       >
                         ยกเลิก
                       </button>
@@ -1572,7 +1646,13 @@ export const EngineerHub: React.FC<EngineerHubProps> = ({
                       OK รับงาน
                     </button>
                     <button
-                      onClick={() => setReschedulingId(req.id)}
+                      onClick={() => {
+                        setReschedulingId(req.id);
+                        setRescheduleEngineer(req.assignedEngineer || chosenEngineer || 'พัด');
+                        setRescheduleDate(req.targetDate || '');
+                        setRescheduleReason('');
+                        setSitePrepNote('');
+                      }}
                       className="px-3 py-2 rounded-lg text-xs font-bold bg-sky-600 hover:bg-sky-500 text-white shadow-sm transition"
                     >
                       เลื่อนวันนัด

@@ -68,6 +68,12 @@ export interface CustomerEvaluation {
   responsiveness: number;// 1-5 (ความรวดเร็วและการตอบสนอง)
   feedback: string;      // max 300
   submittedAt: string;
+  averageScore?: number;
+  evaluatedAt?: string;
+  speedScore?: number;
+  qualityScore?: number;
+  serviceScore?: number;
+  comment?: string;
 }
 
 export interface SalesEvaluation {
@@ -120,6 +126,7 @@ export interface EEngineerRequest {
   soNumber: string;          // SO NO.
   requestDate: string;       // วันที่ร้องขอ
   targetDate: string;        // วันที่ต้องการให้เข้า
+  targetTime?: string;       // เวลาที่ต้องการให้เข้า
   deadlineDate: string;      // กำหนดเสร็จ
   customerName: string;      // ชื่อลูกค้า
   projectName: string;       // ชื่อโครงการ
@@ -144,6 +151,7 @@ export interface EEngineerRequest {
   status: RequestStatus;
   
   // Engineer scheduling / rejection notes
+  engineerRescheduledBy?: string;
   engineerRescheduleDate?: string;
   engineerRescheduleReason?: string;
   engineerSitePreparation?: string; // สิ่งที่หน้างานต้องเตรียม

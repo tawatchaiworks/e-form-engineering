@@ -922,8 +922,8 @@ export const SalesHub: React.FC<SalesHubProps> = ({
                       <span className="text-xs font-black text-sky-700">{req.soNumber}</span>
                       <h4 className="text-sm font-bold text-slate-900">{req.projectName}</h4>
                     </div>
-                    <span className="text-xs px-2 py-0.5 rounded bg-sky-100 text-sky-800 font-bold">
-                      ช่าง{req.assignedEngineer}
+                    <span className="text-xs px-2.5 py-1 rounded-lg bg-sky-100 text-sky-900 font-bold border border-sky-300">
+                      ช่างผู้ขอเลื่อน: ช่าง{req.engineerRescheduledBy || req.assignedEngineer || 'ไม่ระบุ'}
                     </span>
                   </div>
 

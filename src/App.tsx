@@ -29,7 +29,8 @@ import {
   syncStaffToFirestore, 
   syncInquiryToFirestore, 
   syncAttendanceToFirestore, 
-  deleteStaffFromFirestore 
+  deleteStaffFromFirestore,
+  testFirestoreConnection
 } from './lib/firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { collection, onSnapshot } from 'firebase/firestore';
@@ -55,8 +56,9 @@ export const App: React.FC = () => {
   // Document A4 Print modal
   const [printRequest, setPrintRequest] = useState<EEngineerRequest | null>(null);
 
-  // 1. Listen to Firebase Auth state
+  // 1. Listen to Firebase Auth state & Test Firestore connection
   useEffect(() => {
+    testFirestoreConnection();
     const unsubscribe = onAuthStateChanged(auth, user => {
       setCurrentUser(user);
     });

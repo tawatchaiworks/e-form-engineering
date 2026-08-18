@@ -5,10 +5,12 @@ import {
   doc, 
   setDoc, 
   getDocs, 
+  getDocFromServer,
   onSnapshot, 
   writeBatch,
   query,
-  orderBy
+  orderBy,
+  deleteDoc
 } from 'firebase/firestore';
 import { 
   getAuth, 
@@ -33,6 +35,66 @@ export const db = firebaseConfig.firestoreDatabaseId && firebaseConfig.firestore
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
+
+// Test Firestore Connection
+export async function testFirestoreConnection(): Promise<boolean> {
+  try {
+    await getDocFromServer(doc(db, 'system', 'connection_test'));
+    return true;
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('the client is offline')) {
+      console.warn('Firestore connection test: Client is currently offline.');
+    }
+    return false;
+  }
+}
+
+// Error handling helper conforming to FirestoreErrorInfo standard
+export enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+export interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId?: string | null;
+    email?: string | null;
+    emailVerified?: boolean | null;
+    isAnonymous?: boolean | null;
+    tenantId?: string | null;
+    providerInfo?: {
+      providerId?: string | null;
+      email?: string | null;
+    }[];
+  };
+}
+
+export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email,
+      emailVerified: auth.currentUser?.emailVerified,
+      isAnonymous: auth.currentUser?.isAnonymous,
+      tenantId: auth.currentUser?.tenantId,
+      providerInfo: auth.currentUser?.providerData?.map(provider => ({
+        providerId: provider.providerId,
+        email: provider.email,
+      })) || []
+    },
+    operationType,
+    path
+  };
+  console.error('Firestore Error:', JSON.stringify(errInfo));
+}
 
 // Auth Functions
 export const signInWithGoogle = async (): Promise<User | null> => {
@@ -68,15 +130,17 @@ export const COLLECTIONS = {
   STAFF: 'staff',
   INQUIRIES: 'inquiries',
   ATTENDANCE: 'daily_attendance',
+  USERS: 'users',
 };
 
 // Sync functions
 export const syncRequestToFirestore = async (request: EEngineerRequest) => {
+  const path = `${COLLECTIONS.REQUESTS}/${request.id}`;
   try {
     const docRef = doc(db, COLLECTIONS.REQUESTS, request.id);
     await setDoc(docRef, request, { merge: true });
   } catch (err) {
-    console.error('Error writing request to Firestore:', err);
+    handleFirestoreError(err, OperationType.WRITE, path);
   }
 };
 
@@ -89,7 +153,7 @@ export const syncAllRequestsToFirestore = async (requests: EEngineerRequest[]) =
     });
     await batch.commit();
   } catch (err) {
-    console.error('Error batch syncing requests to Firestore:', err);
+    handleFirestoreError(err, OperationType.WRITE, COLLECTIONS.REQUESTS);
   }
 };
 
@@ -102,25 +166,27 @@ export const syncStaffToFirestore = async (staffList: StaffMember[]) => {
     });
     await batch.commit();
   } catch (err) {
-    console.error('Error syncing staff to Firestore:', err);
+    handleFirestoreError(err, OperationType.WRITE, COLLECTIONS.STAFF);
   }
 };
 
 export const syncInquiryToFirestore = async (inquiry: EngineerInquiry) => {
+  const path = `${COLLECTIONS.INQUIRIES}/${inquiry.id}`;
   try {
     const docRef = doc(db, COLLECTIONS.INQUIRIES, inquiry.id);
     await setDoc(docRef, inquiry, { merge: true });
   } catch (err) {
-    console.error('Error writing inquiry to Firestore:', err);
+    handleFirestoreError(err, OperationType.WRITE, path);
   }
 };
 
 export const syncAttendanceToFirestore = async (record: EngineerDailyAttendance) => {
+  const path = `${COLLECTIONS.ATTENDANCE}/${record.id}`;
   try {
     const docRef = doc(db, COLLECTIONS.ATTENDANCE, record.id);
     await setDoc(docRef, record, { merge: true });
   } catch (err) {
-    console.error('Error writing attendance to Firestore:', err);
+    handleFirestoreError(err, OperationType.WRITE, path);
   }
 };
 
@@ -133,7 +199,7 @@ export const syncAllAttendanceToFirestore = async (records: EngineerDailyAttenda
     });
     await batch.commit();
   } catch (err) {
-    console.error('Error batch syncing attendance to Firestore:', err);
+    handleFirestoreError(err, OperationType.WRITE, COLLECTIONS.ATTENDANCE);
   }
 };
 
@@ -146,17 +212,17 @@ export const syncAllInquiriesToFirestore = async (inquiries: EngineerInquiry[]) 
     });
     await batch.commit();
   } catch (err) {
-    console.error('Error batch syncing inquiries to Firestore:', err);
+    handleFirestoreError(err, OperationType.WRITE, COLLECTIONS.INQUIRIES);
   }
 };
 
 export const deleteStaffFromFirestore = async (id: string) => {
+  const path = `${COLLECTIONS.STAFF}/${id}`;
   try {
     const docRef = doc(db, COLLECTIONS.STAFF, id);
-    const { deleteDoc } = await import('firebase/firestore');
     await deleteDoc(docRef);
   } catch (err) {
-    console.error('Error deleting staff from Firestore:', err);
+    handleFirestoreError(err, OperationType.DELETE, path);
   }
 };
 
