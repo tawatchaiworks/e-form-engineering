@@ -114,7 +114,7 @@ export const EngineerStatusModal: React.FC<EngineerStatusModalProps> = ({
     if (onSaveAttendance) onSaveAttendance(newRecord);
     if (onUpdateStatus) onUpdateStatus(eng.id, 'busy');
 
-    setActionSuccessMsg(`บันทึก Check-In ช่าง${eng.name} สำเร็จเวลา ${timeShort} น.`);
+    setActionSuccessMsg(`บันทึก Check-In ช่าง${eng.name} สำเร็จเวลา ${timeShort} น. (ปุ่มเปลี่ยนเป็นสีแดง: กำลังทำงานหน้างาน)`);
     setTimeout(() => setActionSuccessMsg(null), 3500);
   };
 
@@ -146,7 +146,7 @@ export const EngineerStatusModal: React.FC<EngineerStatusModalProps> = ({
     if (onSaveAttendance) onSaveAttendance(newRecord);
     if (onUpdateStatus) onUpdateStatus(eng.id, 'active');
 
-    setActionSuccessMsg(`บันทึก Check-Out ช่าง${eng.name} สำเร็จเวลา ${timeShort} น. (ปิดรอบประจำวัน)`);
+    setActionSuccessMsg(`บันทึก Check-Out ช่าง${eng.name} สำเร็จเวลา ${timeShort} น. (เปลี่ยนเป็นสีเขียว: พร้อมรับงาน)`);
     setTimeout(() => setActionSuccessMsg(null), 3500);
   };
 
@@ -324,7 +324,7 @@ export const EngineerStatusModal: React.FC<EngineerStatusModalProps> = ({
                         <span className="text-slate-500 font-medium flex items-center gap-1 text-[11px]">
                           <LogIn className="w-3 h-3 text-emerald-600" /> Check-in:
                         </span>
-                        <strong className="text-emerald-700 font-mono text-xs">
+                        <strong className={`font-mono text-xs ${att?.status === 'checked_in' || eng.workStatus === 'busy' ? 'text-rose-600 font-black' : 'text-emerald-700'}`}>
                           {att?.checkInTime || '08:30 น.'}
                         </strong>
                       </div>
@@ -332,10 +332,10 @@ export const EngineerStatusModal: React.FC<EngineerStatusModalProps> = ({
                       {/* Check-Out Time */}
                       <div className="flex items-center justify-between">
                         <span className="text-slate-500 font-medium flex items-center gap-1 text-[11px]">
-                          <LogOut className="w-3 h-3 text-rose-600" /> Check-out:
+                          <LogOut className="w-3 h-3 text-slate-600" /> Check-out:
                         </span>
                         <strong className="text-slate-700 font-mono text-xs">
-                          {att?.checkOutTime || (att?.status === 'checked_in' ? 'กำลังปฏิบัติงาน...' : '17:30 น.')}
+                          {att?.checkOutTime || (att?.status === 'checked_in' || eng.workStatus === 'busy' ? 'กำลังปฏิบัติงาน...' : '17:30 น.')}
                         </strong>
                       </div>
 
@@ -343,24 +343,35 @@ export const EngineerStatusModal: React.FC<EngineerStatusModalProps> = ({
                       <div className="flex items-center justify-between pt-1 border-t border-slate-100 text-[11px]">
                         <span className="text-slate-500 font-medium">รวมเวลาทำงาน:</span>
                         <span className="font-bold text-indigo-900 bg-indigo-50 px-2 py-0.5 rounded text-[10px]">
-                          {att?.totalHours || '9 ชม. 00 นาที'}
+                          {att?.totalHours || (att?.status === 'checked_in' || eng.workStatus === 'busy' ? 'กำลังปฏิบัติงาน' : '9 ชม. 00 นาที')}
                         </span>
                       </div>
 
-                      {/* Check-in / Out Action Buttons */}
+                      {/* Check-in / Out Action Buttons - Button turns from Green to Red upon Check-In */}
                       <div className="pt-2 flex gap-1.5">
+                        {(() => {
+                          const isCheckedIn = att?.status === 'checked_in' || eng.workStatus === 'busy';
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => handleCheckIn(eng)}
+                              className={`flex-1 inline-flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg font-bold text-[10px] shadow-xs transition cursor-pointer ${
+                                isCheckedIn
+                                  ? 'bg-rose-600 hover:bg-rose-700 text-white ring-2 ring-rose-400/40 animate-pulse'
+                                  : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                              }`}
+                              title={isCheckedIn ? 'Check-in แล้ว (สถานะสีแดง: กำลังทำงานหน้างาน)' : 'กด Check-in เพื่อเข้างาน (จะเปลี่ยนเป็นสีแดง)'}
+                            >
+                              <LogIn className="w-3 h-3" />
+                              <span>{isCheckedIn ? 'Check-in แล้ว (แดง)' : 'Check-in (เขียว)'}</span>
+                            </button>
+                          );
+                        })()}
                         <button
-                          onClick={() => handleCheckIn(eng)}
-                          className="flex-1 inline-flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] shadow-xs transition"
-                          title="บันทึกเวลา Check-in ตอนนี้"
-                        >
-                          <LogIn className="w-3 h-3" />
-                          Check-in
-                        </button>
-                        <button
+                          type="button"
                           onClick={() => handleCheckOut(eng)}
-                          className="flex-1 inline-flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-bold text-[10px] shadow-xs transition"
-                          title="บันทึกเวลา Check-out บันทึกกลับ"
+                          className="flex-1 inline-flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-bold text-[10px] shadow-xs transition cursor-pointer"
+                          title="บันทึกเวลา Check-out บันทึกกลับ (เปลี่ยนเป็นสีเขียว: ว่าง)"
                         >
                           <LogOut className="w-3 h-3" />
                           Check-out
@@ -498,17 +509,32 @@ export const EngineerStatusModal: React.FC<EngineerStatusModalProps> = ({
                             </span>
                           </td>
                           <td className="py-3 px-3 text-right">
-                            <div className="flex items-center justify-end gap-1">
+                            <div className="flex items-center justify-end gap-1.5">
+                              {(() => {
+                                const isCheckedIn = att?.status === 'checked_in' || eng.workStatus === 'busy';
+                                return (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleCheckIn(eng)}
+                                    className={`px-3 py-1 rounded-lg text-[10px] font-bold transition flex items-center gap-1 shadow-2xs cursor-pointer ${
+                                      isCheckedIn
+                                        ? 'bg-rose-600 hover:bg-rose-700 text-white ring-1 ring-rose-400'
+                                        : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                                    }`}
+                                    title={isCheckedIn ? 'Check-in แล้ว (แดง: กำลังทำงาน)' : 'กด Check-in เข้างาน (เขียว)'}
+                                  >
+                                    <LogIn className="w-3 h-3" />
+                                    {isCheckedIn ? 'Check-in แล้ว (แดง)' : 'Check-in (เขียว)'}
+                                  </button>
+                                );
+                              })()}
                               <button
-                                onClick={() => handleCheckIn(eng)}
-                                className="px-2.5 py-1 rounded bg-emerald-100 hover:bg-emerald-200 text-emerald-800 text-[10px] font-bold transition"
-                              >
-                                Check-in
-                              </button>
-                              <button
+                                type="button"
                                 onClick={() => handleCheckOut(eng)}
-                                className="px-2.5 py-1 rounded bg-slate-200 hover:bg-slate-300 text-slate-800 text-[10px] font-bold transition"
+                                className="px-2.5 py-1 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 text-[10px] font-bold transition flex items-center gap-1 shadow-2xs cursor-pointer"
+                                title="Check-out บันทึกเวลากลับ"
                               >
+                                <LogOut className="w-3 h-3" />
                                 Check-out
                               </button>
                             </div>
