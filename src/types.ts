@@ -1,4 +1,4 @@
-export type Role = 'admin_sale' | 'sale' | 'engineer' | 'customer' | 'dashboard' | 'staff' | 'logs';
+export type Role = 'admin_sale' | 'sale' | 'engineer' | 'customer' | 'dashboard' | 'staff' | 'logs' | 'faq';
 
 export type Priority = 'alert_emergency' | 'alert_urgent' | 'alert_normal';
 
@@ -194,9 +194,10 @@ export interface StaffMember {
   id: string;
   name: string;
   team: StaffTeam;
+  department?: string; // แผนก เช่น "แผนกธุรการและประสานงานขาย", "แผนกวิศวกรรมและบริการเทคนิค", "แผนกงานขายโครงการ", "แผนกบริหารการขาย"
+  role?: string;       // ตำแหน่ง เช่น "หัวหน้าทีมธุรการขาย", "วิศวกรอาวุโส", "ผู้แทนฝ่ายขาย", "ผู้จัดการฝ่ายขาย"
   phone: string;
   email?: string;
-  role?: string;
   workStatus: StaffWorkStatus; // สำหรับ Engineer: available (ว่าง=เขียว), waiting (รองาน=เหลือง), busy (กำลังทำงาน=แดง)
   currentTask?: string;
   currentLocation?: {
@@ -209,6 +210,8 @@ export interface StaffMember {
 
 export interface AttendanceSession {
   sessionNumber: number; // 1, 2, 3, 4 (ครั้งที่ 1, ครั้งที่ 2, ครั้งที่ 3, ครั้งที่ 4)
+  jobId?: string; // รหัสงาน SO หรือ Request ID
+  taskName?: string; // ชื่องาน / โครงการที่กำลังปฏิบัติงาน
   checkInTime: string; // e.g. "08:30 น."
   checkInLocation?: string;
   checkOutTime?: string; // e.g. "12:00 น."

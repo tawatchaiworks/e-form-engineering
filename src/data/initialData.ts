@@ -2,15 +2,44 @@ import { StaffMember, EEngineerRequest, EngineerInquiry, EngineerDailyAttendance
 
 export const INITIAL_STAFF: StaffMember[] = [
   // Admin Sale
-  { id: 'adm-1', name: 'พี่ก้อย', team: 'Admin Sale', phone: '081-234-5671', email: 'koy.adm@lumencraft.co.th', workStatus: 'active' },
-  { id: 'adm-2', name: 'ชมพู่', team: 'Admin Sale', phone: '081-234-5672', email: 'chompoo.adm@lumencraft.co.th', workStatus: 'active' },
-  { id: 'adm-3', name: 'เพชร', team: 'Admin Sale', phone: '081-234-5673', email: 'petch.adm@lumencraft.co.th', workStatus: 'active' },
+  { 
+    id: 'adm-1', 
+    name: 'พี่ก้อย', 
+    team: 'Admin Sale', 
+    role: 'หัวหน้าทีมธุรการขาย (Senior Sales Admin Lead)', 
+    department: 'แผนกธุรการและประสานงานขาย (Admin Sales)', 
+    phone: '081-234-5671', 
+    email: 'koy.adm@lumencraft.co.th', 
+    workStatus: 'active' 
+  },
+  { 
+    id: 'adm-2', 
+    name: 'ชมพู่', 
+    team: 'Admin Sale', 
+    role: 'เจ้าหน้าที่ประสานงานขาย (Sales Coordinator)', 
+    department: 'แผนกธุรการและประสานงานขาย (Admin Sales)', 
+    phone: '081-234-5672', 
+    email: 'chompoo.adm@lumencraft.co.th', 
+    workStatus: 'active' 
+  },
+  { 
+    id: 'adm-3', 
+    name: 'เพชร', 
+    team: 'Admin Sale', 
+    role: 'เจ้าหน้าที่ธุรการเอกสารและระบบ (Sales Admin Officer)', 
+    department: 'แผนกธุรการและประสานงานขาย (Admin Sales)', 
+    phone: '081-234-5673', 
+    email: 'petch.adm@lumencraft.co.th', 
+    workStatus: 'active' 
+  },
   
   // Engineers (พัด, โชค, วิน, วัฒน์)
   { 
     id: 'eng-1', 
     name: 'พัด', 
     team: 'Engineer', 
+    role: 'วิศวกรควบคุมระบบแสงสว่าง (Lighting Control Engineer)', 
+    department: 'แผนกวิศวกรรมและบริการเทคนิค (Engineering)', 
     phone: '089-111-2233', 
     email: 'pat.eng@lumencraft.co.th', 
     workStatus: 'busy', // กำลังทำงาน (แดง)
@@ -26,6 +55,8 @@ export const INITIAL_STAFF: StaffMember[] = [
     id: 'eng-2', 
     name: 'โชค', 
     team: 'Engineer', 
+    role: 'วิศวกรระบบ DALI และ Automation (Systems Engineer)', 
+    department: 'แผนกวิศวกรรมและบริการเทคนิค (Engineering)', 
     phone: '089-222-3344', 
     email: 'choke.eng@lumencraft.co.th', 
     workStatus: 'active', // ว่าง (เขียว)
@@ -41,6 +72,8 @@ export const INITIAL_STAFF: StaffMember[] = [
     id: 'eng-3', 
     name: 'วิน', 
     team: 'Engineer', 
+    role: 'วิศวกรสนามและทดสอบอุปกรณ์ (Field Test Engineer)', 
+    department: 'แผนกวิศวกรรมและบริการเทคนิค (Engineering)', 
     phone: '089-333-4455', 
     email: 'win.eng@lumencraft.co.th', 
     workStatus: 'waiting', // รองาน (เหลือง)
@@ -56,6 +89,8 @@ export const INITIAL_STAFF: StaffMember[] = [
     id: 'eng-4', 
     name: 'วัฒน์', 
     team: 'Engineer', 
+    role: 'วิศวกรงานติดตั้งและ Mock up (Installation & Mockup Engineer)', 
+    department: 'แผนกวิศวกรรมและบริการเทคนิค (Engineering)', 
     phone: '089-444-5566', 
     email: 'wat.eng@lumencraft.co.th', 
     workStatus: 'busy', // กำลังทำงาน (แดง)
@@ -69,18 +104,108 @@ export const INITIAL_STAFF: StaffMember[] = [
   },
 
   // SALE
-  { id: 'sale-1', name: 'คุณกุ้ง', team: 'SALE', phone: '082-101-0001', email: 'kung.sale@lumencraft.co.th', workStatus: 'active' },
-  { id: 'sale-2', name: 'คุณปุ๋ม', team: 'SALE', phone: '082-101-0002', email: 'poum.sale@lumencraft.co.th', workStatus: 'active' },
-  { id: 'sale-3', name: 'คุณเก่ง', team: 'SALE', phone: '082-101-0003', email: 'keng.sale@lumencraft.co.th', workStatus: 'active' },
-  { id: 'sale-4', name: 'คุณป่าน', team: 'SALE', phone: '082-101-0004', email: 'parn.sale@lumencraft.co.th', workStatus: 'active' },
-  { id: 'sale-5', name: 'คุณเบลล่า', team: 'SALE', phone: '082-101-0005', email: 'bella.sale@lumencraft.co.th', workStatus: 'active' },
-  { id: 'sale-6', name: 'คุณพอพอ', team: 'SALE', phone: '082-101-0006', email: 'pawpaw.sale@lumencraft.co.th', workStatus: 'active' },
-  { id: 'sale-7', name: 'คุณมิ้น', team: 'SALE', phone: '082-101-0007', email: 'mint.sale@lumencraft.co.th', workStatus: 'active' },
-  { id: 'sale-8', name: 'คุณปุ๊', team: 'SALE', phone: '082-101-0008', email: 'pu.sale@lumencraft.co.th', workStatus: 'active' },
-  { id: 'sale-9', name: 'คุณแพม', team: 'SALE', phone: '082-101-0009', email: 'pam.sale@lumencraft.co.th', workStatus: 'active' },
+  { 
+    id: 'sale-1', 
+    name: 'คุณกุ้ง', 
+    team: 'SALE', 
+    role: 'เจ้าหน้าที่บริหารงานขายโครงการอาวุโส (Senior Project Sales)', 
+    department: 'แผนกงานขายโครงการ (Sales Department)', 
+    phone: '082-101-0001', 
+    email: 'kung.sale@lumencraft.co.th', 
+    workStatus: 'active' 
+  },
+  { 
+    id: 'sale-2', 
+    name: 'คุณปุ๋ม', 
+    team: 'SALE', 
+    role: 'เจ้าหน้าที่บริหารงานขายโครงการ (Project Sales Executive)', 
+    department: 'แผนกงานขายโครงการ (Sales Department)', 
+    phone: '082-101-0002', 
+    email: 'poum.sale@lumencraft.co.th', 
+    workStatus: 'active' 
+  },
+  { 
+    id: 'sale-3', 
+    name: 'คุณเก่ง', 
+    team: 'SALE', 
+    role: 'เจ้าหน้าที่บริหารงานขายโครงการ (Project Sales Executive)', 
+    department: 'แผนกงานขายโครงการ (Sales Department)', 
+    phone: '082-101-0003', 
+    email: 'keng.sale@lumencraft.co.th', 
+    workStatus: 'active' 
+  },
+  { 
+    id: 'sale-4', 
+    name: 'คุณป่าน', 
+    team: 'SALE', 
+    role: 'เจ้าหน้าที่งานขายผลิตภัณฑ์ส่องสว่าง (Lighting Sales Specialist)', 
+    department: 'แผนกงานขายโครงการ (Sales Department)', 
+    phone: '082-101-0004', 
+    email: 'parn.sale@lumencraft.co.th', 
+    workStatus: 'active' 
+  },
+  { 
+    id: 'sale-5', 
+    name: 'คุณเบลล่า', 
+    team: 'SALE', 
+    role: 'เจ้าหน้าที่พัฒนาธุรกิจงานขาย (Business Development Sales)', 
+    department: 'แผนกงานขายโครงการ (Sales Department)', 
+    phone: '082-101-0005', 
+    email: 'bella.sale@lumencraft.co.th', 
+    workStatus: 'active' 
+  },
+  { 
+    id: 'sale-6', 
+    name: 'คุณพอพอ', 
+    team: 'SALE', 
+    role: 'เจ้าหน้าที่งานขาย (Sales Executive)', 
+    department: 'แผนกงานขายโครงการ (Sales Department)', 
+    phone: '082-101-0006', 
+    email: 'pawpaw.sale@lumencraft.co.th', 
+    workStatus: 'active' 
+  },
+  { 
+    id: 'sale-7', 
+    name: 'คุณมิ้น', 
+    team: 'SALE', 
+    role: 'เจ้าหน้าที่งานขาย (Sales Executive)', 
+    department: 'แผนกงานขายโครงการ (Sales Department)', 
+    phone: '082-101-0007', 
+    email: 'mint.sale@lumencraft.co.th', 
+    workStatus: 'active' 
+  },
+  { 
+    id: 'sale-8', 
+    name: 'คุณปุ๊', 
+    team: 'SALE', 
+    role: 'เจ้าหน้าที่งานขาย (Sales Executive)', 
+    department: 'แผนกงานขายโครงการ (Sales Department)', 
+    phone: '082-101-0008', 
+    email: 'pu.sale@lumencraft.co.th', 
+    workStatus: 'active' 
+  },
+  { 
+    id: 'sale-9', 
+    name: 'คุณแพม', 
+    team: 'SALE', 
+    role: 'เจ้าหน้าที่งานขาย (Sales Executive)', 
+    department: 'แผนกงานขายโครงการ (Sales Department)', 
+    phone: '082-101-0009', 
+    email: 'pam.sale@lumencraft.co.th', 
+    workStatus: 'active' 
+  },
 
   // SALE MANAGER
-  { id: 'mgr-1', name: 'คุณอ้อม', team: 'SALE MANAGER', phone: '080-999-8888', email: 'aom.mgr@lumencraft.co.th', workStatus: 'active' }
+  { 
+    id: 'mgr-1', 
+    name: 'คุณอ้อม', 
+    team: 'SALE MANAGER', 
+    role: 'ผู้จัดการฝ่ายขายและพัฒนาโครงการ (Sales & Project Manager)', 
+    department: 'แผนกบริหารการขาย (Sales Management)', 
+    phone: '080-999-8888', 
+    email: 'aom.mgr@lumencraft.co.th', 
+    workStatus: 'active' 
+  }
 ];
 
 export const INITIAL_REQUESTS: EEngineerRequest[] = [

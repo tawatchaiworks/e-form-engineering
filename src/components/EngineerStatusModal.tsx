@@ -181,10 +181,12 @@ export const EngineerStatusModal: React.FC<EngineerStatusModalProps> = ({
       sessionNumber = Math.min(existingSessions.length + 1, 4);
       const newSession: AttendanceSession = {
         sessionNumber,
+        taskName: eng.currentTask || 'งานบริการและตรวจสอบระบบหน้างาน',
+        jobId: (eng.currentTask && eng.currentTask.match(/SO-[0-9]+/)?.[0]) || 'SO-SERVICE',
         checkInTime: `${timeShort} น.`,
         checkInLocation: defaultLoc,
         status: 'checked_in',
-        notes: `Check-in ครั้งที่ ${sessionNumber} (${defaultLoc})`
+        notes: `Check-in ครั้งที่ ${sessionNumber} (${eng.currentTask || defaultLoc})`
       };
 
       if (existingSessions.length >= 4) {
@@ -470,89 +472,97 @@ export const EngineerStatusModal: React.FC<EngineerStatusModalProps> = ({
                       </span>
                     </div>
 
-                    {/* 4-Session Log Display: ครั้งที่ 1, ครั้งที่ 2, ครั้งที่ 3, ครั้งที่ 4 */}
+                    {/* Session Log Display: โชว์จำนวนครั้งก็ต่อเมื่อมีการเช็คอินและเช็คเอาท์ตามรอบจริง */}
                     <div className="mt-3 bg-white/95 rounded-xl p-3 border border-slate-200 space-y-2 text-xs shadow-xs">
                       <div className="text-[11px] font-bold text-slate-800 border-b border-slate-100 pb-1.5 flex items-center justify-between">
                         <span className="flex items-center gap-1 text-indigo-700">
-                          <Layers className="w-3.5 h-3.5" /> Log บันทึกเวลา 4 ครั้ง (ไม่แทนที่)
+                          <Layers className="w-3.5 h-3.5" /> รอบการลงเวลา (Check-in/Out)
                         </span>
-                        <span className="text-[10px] text-slate-500 font-mono">
-                          {sessions.length}/4 ครั้ง
+                        <span className="text-[10px] text-slate-600 font-mono bg-slate-100 px-1.5 py-0.5 rounded font-bold">
+                          {sessions.length > 0 ? `บันทึกแล้ว ${sessions.length}/4 รอบ` : 'ยังไม่มีรอบ'}
                         </span>
                       </div>
 
-                      {/* 4 Sessions List */}
-                      <div className="space-y-1.5">
-                        {[1, 2, 3, 4].map(roundNum => {
-                          const sess = sessions.find(s => s.sessionNumber === roundNum);
-                          const isSessionActive = sess && !sess.checkOutTime;
+                      {/* Sessions List - โชว์เฉพาะรอบที่มีการ Check-in / Check-out งานจริง */}
+                      {sessions.length === 0 ? (
+                        <div className="py-3 px-2 rounded-lg border border-dashed border-slate-200 bg-slate-50/50 text-center space-y-1">
+                          <div className="text-[11px] text-slate-500 font-medium">ยังไม่มีรอบการลงเวลาสำหรับงานนี้</div>
+                          <div className="text-[10px] text-slate-400">กดปุ่ม Check-in ด้านล่างเพื่อเริ่มรอบที่ 1</div>
+                        </div>
+                      ) : (
+                        <div className="space-y-1.5">
+                          {sessions.map((sess) => {
+                            const isSessionActive = !sess.checkOutTime;
 
-                          return (
-                            <div
-                              key={roundNum}
-                              className={`p-1.5 rounded-lg border text-[11px] transition ${
-                                isSessionActive
-                                  ? 'bg-rose-50 border-rose-300 text-rose-900 ring-1 ring-rose-400'
-                                  : sess
-                                  ? 'bg-slate-50/90 border-slate-200 text-slate-800'
-                                  : 'bg-slate-50/40 border-dashed border-slate-200 text-slate-400'
-                              }`}
-                            >
-                              <div className="flex items-center justify-between font-bold text-[10px]">
-                                <span className="flex items-center gap-1">
-                                  <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold ${
-                                    isSessionActive
-                                      ? 'bg-rose-600 text-white'
-                                      : sess
-                                      ? 'bg-indigo-600 text-white'
-                                      : 'bg-slate-200 text-slate-500'
+                            return (
+                              <div
+                                key={sess.sessionNumber}
+                                className={`p-2 rounded-lg border text-[11px] transition shadow-2xs ${
+                                  isSessionActive
+                                    ? 'bg-rose-50 border-rose-300 text-rose-900 ring-1 ring-rose-400'
+                                    : 'bg-slate-50/90 border-slate-200 text-slate-800'
+                                }`}
+                              >
+                                <div className="flex items-center justify-between font-bold text-[10px]">
+                                  <span className="flex items-center gap-1.5">
+                                    <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold ${
+                                      isSessionActive
+                                        ? 'bg-rose-600 text-white animate-pulse'
+                                        : 'bg-indigo-600 text-white'
+                                    }`}>
+                                      {sess.sessionNumber}
+                                    </span>
+                                    <span>ครั้งที่ {sess.sessionNumber}</span>
+                                    {sess.taskName && (
+                                      <span className="text-[9px] text-slate-500 max-w-[110px] truncate font-normal">
+                                        • {sess.taskName}
+                                      </span>
+                                    )}
+                                  </span>
+
+                                  {isSessionActive ? (
+                                    <span className="text-rose-600 font-bold flex items-center gap-1">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping"></span>
+                                      กำลังทำงาน (เข้าแล้ว)
+                                    </span>
+                                  ) : sess.duration ? (
+                                    <span className="text-emerald-700 font-mono text-[9px] font-bold bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
+                                      {sess.duration}
+                                    </span>
+                                  ) : (
+                                    <span className="text-emerald-600 text-[9px]">เสร็จสิ้น</span>
+                                  )}
+                                </div>
+
+                                <div className="mt-1.5 grid grid-cols-2 gap-1 text-[10px] font-mono">
+                                  <div className="flex items-center gap-1 text-emerald-700 bg-white/90 px-1.5 py-0.5 rounded border border-slate-100">
+                                    <LogIn className="w-2.5 h-2.5 shrink-0" />
+                                    <span className="truncate">เข้า: {sess.checkInTime}</span>
+                                  </div>
+                                  <div className={`flex items-center gap-1 px-1.5 py-0.5 rounded border border-slate-100 ${
+                                    isSessionActive 
+                                      ? 'text-rose-700 bg-rose-100/50 font-bold' 
+                                      : 'text-slate-700 bg-white/90'
                                   }`}>
-                                    {roundNum}
-                                  </span>
-                                  ครั้งที่ {roundNum}
-                                </span>
-                                {isSessionActive ? (
-                                  <span className="text-rose-600 font-bold flex items-center gap-1">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping"></span>
-                                    กำลังทำงาน
-                                  </span>
-                                ) : sess?.duration ? (
-                                  <span className="text-emerald-700 font-mono text-[9px] font-bold bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
-                                    {sess.duration}
-                                  </span>
-                                ) : (
-                                  <span className="text-slate-400 text-[9px]">รอดำเนินการ</span>
-                                )}
+                                    <LogOut className="w-2.5 h-2.5 shrink-0" />
+                                    <span className="truncate">ออก: {sess.checkOutTime || 'กำลังทำ...'}</span>
+                                  </div>
+                                </div>
                               </div>
-
-                              {sess ? (
-                                <div className="mt-1 grid grid-cols-2 gap-1 text-[10px] font-mono">
-                                  <div className="flex items-center gap-1 text-emerald-700 bg-white/70 px-1 py-0.5 rounded">
-                                    <LogIn className="w-2.5 h-2.5" />
-                                    <span>เข้า: {sess.checkInTime}</span>
-                                  </div>
-                                  <div className="flex items-center gap-1 text-slate-700 bg-white/70 px-1 py-0.5 rounded">
-                                    <LogOut className="w-2.5 h-2.5" />
-                                    <span>ออก: {sess.checkOutTime || 'กำลังทำ...'}</span>
-                                  </div>
-                                </div>
-                              ) : (
-                                <div className="mt-0.5 text-[9px] text-slate-400 italic text-center">
-                                  ยังไม่มีการลงเวลา
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
+                            );
+                          })}
+                        </div>
+                      )}
 
                       {/* Cumulative Total Duration */}
-                      <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-[11px]">
-                        <span className="text-slate-600 font-medium">รวมเวลาปฏิบัติงาน:</span>
-                        <span className="font-bold text-indigo-950 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded text-[10px]">
-                          {calculateTotalWorkingHours(sessions)}
-                        </span>
-                      </div>
+                      {sessions.length > 0 && (
+                        <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-[11px]">
+                          <span className="text-slate-600 font-medium">รวมเวลาปฏิบัติงาน:</span>
+                          <span className="font-bold text-indigo-950 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded text-[10px]">
+                            {calculateTotalWorkingHours(sessions)}
+                          </span>
+                        </div>
+                      )}
 
                       {/* Check-in / Out Action Buttons - Button turns from Green to Red upon Check-In */}
                       <div className="pt-2 flex gap-1.5">

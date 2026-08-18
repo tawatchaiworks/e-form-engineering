@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Building2, ShieldCheck, Clock, MapPin, Zap, LogIn, LogOut, Cloud, CloudCheck, User as UserIcon } from 'lucide-react';
+import { Building2, ShieldCheck, Clock, MapPin, Zap, LogIn, LogOut, Cloud, CloudCheck, User as UserIcon, HelpCircle } from 'lucide-react';
 import { Role } from '../types';
 import { User } from 'firebase/auth';
 
@@ -302,6 +302,20 @@ export const CompanyHeader: React.FC<CompanyHeaderProps> = ({
             >
               <span className="mr-1.5">📑</span>
               7. รายการทั้งหมด & พิมพ์ A4
+            </button>
+
+            {/* 8. FAQ Knowledge Base (ถามตอบและข้อมูลปัญหาด้านเทคนิค) */}
+            <button
+              id="nav-tab-faq"
+              onClick={() => onRoleChange('faq')}
+              className={`flex items-center px-3.5 py-2 rounded-lg text-xs sm:text-sm font-medium whitespace-nowrap transition ${
+                currentRole === 'faq'
+                  ? 'bg-amber-600 text-white font-semibold shadow'
+                  : 'text-slate-300 hover:text-white hover:bg-slate-800'
+              }`}
+            >
+              <HelpCircle className="w-4 h-4 mr-1.5 text-amber-400" />
+              8. FAQ Knowledge (ถามตอบ & ปัญหาเทคนิค)
             </button>
 
           </nav>

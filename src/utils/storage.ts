@@ -39,7 +39,16 @@ export const getStoredStaff = (): StaffMember[] => {
       localStorage.setItem(STORAGE_KEYS.STAFF, JSON.stringify(INITIAL_STAFF));
       return INITIAL_STAFF;
     }
-    return JSON.parse(raw);
+    const parsed: StaffMember[] = JSON.parse(raw);
+    const enriched = parsed.map(p => {
+      const match = INITIAL_STAFF.find(init => init.id === p.id || init.name === p.name);
+      return {
+        ...p,
+        role: p.role || match?.role || (p.team === 'Engineer' ? 'วิศวกรบริการเทคนิค' : p.team === 'Admin Sale' ? 'เจ้าหน้าที่ธุรการขาย' : p.team === 'SALE MANAGER' ? 'ผู้จัดการฝ่ายขาย' : 'เจ้าหน้าที่ฝ่ายขาย'),
+        department: p.department || match?.department || (p.team === 'Engineer' ? 'แผนกวิศวกรรมและบริการเทคนิค (Engineering)' : p.team === 'Admin Sale' ? 'แผนกธุรการและประสานงานขาย (Admin Sales)' : p.team === 'SALE MANAGER' ? 'แผนกบริหารการขาย (Sales Management)' : 'แผนกงานขายโครงการ (Sales Department)'),
+      };
+    });
+    return enriched;
   } catch (err) {
     console.error('Error reading staff from storage', err);
     return INITIAL_STAFF;

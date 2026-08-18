@@ -14,6 +14,7 @@ import { EngineerHub } from './components/EngineerHub';
 import { CustomerPortal } from './components/CustomerPortal';
 import { ExecutiveDashboard } from './components/ExecutiveDashboard';
 import { StaffManagement } from './components/StaffManagement';
+import { FaqKnowledgeHub } from './components/FaqKnowledgeHub';
 import { EngineerCalendarModal } from './components/EngineerCalendarModal';
 import { EngineerStatusModal } from './components/EngineerStatusModal';
 import { EngineerLocationModal } from './components/EngineerLocationModal';
@@ -373,6 +374,10 @@ export const App: React.FC = () => {
             staff={staff}
             onOpenDocumentPrint={req => setPrintRequest(req)}
           />
+        )}
+
+        {currentRole === 'faq' && (
+          <FaqKnowledgeHub />
         )}
 
       </main>
