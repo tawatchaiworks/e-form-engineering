@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { X, Activity, User, Clock, MapPin, CheckCircle, AlertCircle, PlayCircle, Calendar, Timer, Sparkles, LogIn, LogOut, CheckCircle2 } from 'lucide-react';
-import { StaffMember, EEngineerRequest, EngineerDailyAttendance } from '../types';
+import { X, Activity, User, Clock, MapPin, CheckCircle, AlertCircle, PlayCircle, Calendar, Timer, Sparkles, LogIn, LogOut, CheckCircle2, Layers, History } from 'lucide-react';
+import { StaffMember, EEngineerRequest, EngineerDailyAttendance, AttendanceSession } from '../types';
 
 interface EngineerStatusModalProps {
   isOpen: boolean;
@@ -52,6 +52,42 @@ export const EngineerStatusModal: React.FC<EngineerStatusModalProps> = ({
   const todayIso = `${currentTime.getFullYear()}-${String(currentTime.getMonth() + 1).padStart(2, '0')}-${String(currentTime.getDate()).padStart(2, '0')}`;
   const currentHourNumber = currentTime.getHours();
 
+  const parseTimeToMinutes = (timeStr?: string): number | null => {
+    if (!timeStr) return null;
+    const match = timeStr.match(/(\d{1,2})[:.](\d{1,2})/);
+    if (!match) return null;
+    return parseInt(match[1], 10) * 60 + parseInt(match[2], 10);
+  };
+
+  const calculateDuration = (inTimeStr?: string, outTimeStr?: string): string => {
+    if (!inTimeStr || !outTimeStr) return '0 ชม. 00 นาที';
+    const inMins = parseTimeToMinutes(inTimeStr);
+    const outMins = parseTimeToMinutes(outTimeStr);
+    if (inMins === null || outMins === null || outMins < inMins) return '3 ชม. 30 นาที';
+    const diff = outMins - inMins;
+    const hours = Math.floor(diff / 60);
+    const mins = diff % 60;
+    return `${hours} ชม. ${mins > 0 ? `${String(mins).padStart(2, '0')} นาที` : '00 นาที'}`;
+  };
+
+  const calculateTotalWorkingHours = (sessions?: AttendanceSession[]): string => {
+    if (!sessions || sessions.length === 0) return '0 ชม. 00 นาที';
+    let totalMinutes = 0;
+    sessions.forEach(s => {
+      if (s.checkInTime && s.checkOutTime) {
+        const inMins = parseTimeToMinutes(s.checkInTime);
+        const outMins = parseTimeToMinutes(s.checkOutTime);
+        if (inMins !== null && outMins !== null && outMins >= inMins) {
+          totalMinutes += (outMins - inMins);
+        }
+      }
+    });
+    if (totalMinutes === 0) return 'กำลังทำงาน...';
+    const hours = Math.floor(totalMinutes / 60);
+    const mins = totalMinutes % 60;
+    return `${hours} ชม. ${mins > 0 ? `${String(mins).padStart(2, '0')} นาที` : '00 นาที'}`;
+  };
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'active':
@@ -89,21 +125,90 @@ export const EngineerStatusModal: React.FC<EngineerStatusModalProps> = ({
     }
   };
 
-  // Check-In handler for an engineer
+  // Helper to retrieve and normalize 4 sessions (ครั้งที่ 1, 2, 3, 4) for an engineer
+  const getEngineerSessions = (engId: string): AttendanceSession[] => {
+    const att = localAttendance.find(a => a.engineerId === engId);
+    if (att?.sessions && att.sessions.length > 0) {
+      return att.sessions;
+    }
+    if (att?.checkInTime) {
+      return [
+        {
+          sessionNumber: 1,
+          checkInTime: att.checkInTime,
+          checkInLocation: att.checkInLocation || 'สำนักงานใหญ่ LUMENCRAFT',
+          checkOutTime: att.checkOutTime,
+          checkOutLocation: att.checkOutLocation,
+          duration: att.checkOutTime ? calculateDuration(att.checkInTime, att.checkOutTime) : undefined,
+          status: att.checkOutTime ? 'completed' : 'checked_in',
+          notes: att.notes || 'รอบที่ 1'
+        }
+      ];
+    }
+    return [];
+  };
+
+  // Check-In handler for an engineer (Supports 4 sessions without overwriting history)
   const handleCheckIn = (eng: StaffMember) => {
     const defaultLoc = eng.currentLocation ? eng.currentLocation.siteName : 'สำนักงานใหญ่ LUMENCRAFT พัฒนาการ';
     const existing = localAttendance.find(a => a.engineerId === eng.id);
+
+    const existingSessions: AttendanceSession[] = existing?.sessions && existing.sessions.length > 0 
+      ? [...existing.sessions] 
+      : existing?.checkInTime 
+        ? [{
+            sessionNumber: 1,
+            checkInTime: existing.checkInTime,
+            checkInLocation: existing.checkInLocation || defaultLoc,
+            checkOutTime: existing.checkOutTime,
+            checkOutLocation: existing.checkOutLocation,
+            duration: existing.checkOutTime ? calculateDuration(existing.checkInTime, existing.checkOutTime) : undefined,
+            status: existing.checkOutTime ? 'completed' : 'checked_in',
+            notes: existing.notes || 'รอบที่ 1'
+          }]
+        : [];
+
+    // Check if the last session is open
+    const activeSessionIndex = existingSessions.findIndex(s => !s.checkOutTime);
+    let updatedSessions: AttendanceSession[];
+    let sessionNumber = 1;
+
+    if (activeSessionIndex >= 0) {
+      sessionNumber = existingSessions[activeSessionIndex].sessionNumber;
+      updatedSessions = [...existingSessions];
+      setActionSuccessMsg(`ช่าง${eng.name} อยู่ในสถานะ Check-in ครั้งที่ ${sessionNumber} อยู่แล้ว (ปุ่มสีแดง: กำลังทำงาน)`);
+    } else {
+      sessionNumber = Math.min(existingSessions.length + 1, 4);
+      const newSession: AttendanceSession = {
+        sessionNumber,
+        checkInTime: `${timeShort} น.`,
+        checkInLocation: defaultLoc,
+        status: 'checked_in',
+        notes: `Check-in ครั้งที่ ${sessionNumber} (${defaultLoc})`
+      };
+
+      if (existingSessions.length >= 4) {
+        updatedSessions = [...existingSessions.slice(0, 3), newSession];
+      } else {
+        updatedSessions = [...existingSessions, newSession];
+      }
+
+      setActionSuccessMsg(`บันทึก Check-In ช่าง${eng.name} ครั้งที่ ${sessionNumber} สำเร็จเวลา ${timeShort} น. (ปุ่มและสถานะเปลี่ยนเป็นสีแดง: กำลังทำงาน)`);
+    }
+
+    const firstCheckIn = updatedSessions[0]?.checkInTime || `${timeShort} น.`;
     const newRecord: EngineerDailyAttendance = {
       id: existing ? existing.id : `att-${eng.id}-${Date.now()}`,
       engineerId: eng.id,
       engineerName: eng.name,
       date: todayIso,
-      checkInTime: `${timeShort} น.`,
+      checkInTime: firstCheckIn,
       checkOutTime: undefined,
       checkInLocation: defaultLoc,
-      totalHours: 'กำลังทำงาน...',
+      totalHours: calculateTotalWorkingHours(updatedSessions),
       status: 'checked_in',
-      notes: `Check-in เข้างานเรียบร้อย (${defaultLoc})`
+      notes: `Check-in เข้างานครั้งที่ ${sessionNumber} (${defaultLoc})`,
+      sessions: updatedSessions
     };
 
     const updated = [
@@ -114,28 +219,78 @@ export const EngineerStatusModal: React.FC<EngineerStatusModalProps> = ({
     if (onSaveAttendance) onSaveAttendance(newRecord);
     if (onUpdateStatus) onUpdateStatus(eng.id, 'busy');
 
-    setActionSuccessMsg(`บันทึก Check-In ช่าง${eng.name} สำเร็จเวลา ${timeShort} น. (ปุ่มเปลี่ยนเป็นสีแดง: กำลังทำงานหน้างาน)`);
-    setTimeout(() => setActionSuccessMsg(null), 3500);
+    setTimeout(() => setActionSuccessMsg(null), 4000);
   };
 
-  // Check-Out handler for an engineer
+  // Check-Out handler for an engineer (Supports 4 sessions without overwriting history)
   const handleCheckOut = (eng: StaffMember) => {
-    const existing = localAttendance.find(a => a.engineerId === eng.id) || {
-      id: `att-${eng.id}-${Date.now()}`,
+    const existing = localAttendance.find(a => a.engineerId === eng.id);
+    const defaultLoc = eng.currentLocation ? eng.currentLocation.siteName : 'สำนักงานใหญ่ LUMENCRAFT พัฒนาการ';
+
+    const existingSessions: AttendanceSession[] = existing?.sessions && existing.sessions.length > 0 
+      ? [...existing.sessions] 
+      : [{
+          sessionNumber: 1,
+          checkInTime: existing?.checkInTime || '08:30 น.',
+          checkInLocation: existing?.checkInLocation || defaultLoc,
+          status: 'checked_in',
+          notes: 'รอบที่ 1'
+        }];
+
+    // Find the active open session to close
+    const activeSessionIndex = existingSessions.findIndex(s => !s.checkOutTime);
+    let sessionNumber = 1;
+    let updatedSessions: AttendanceSession[];
+
+    if (activeSessionIndex >= 0) {
+      sessionNumber = existingSessions[activeSessionIndex].sessionNumber;
+      const closedSession: AttendanceSession = {
+        ...existingSessions[activeSessionIndex],
+        checkOutTime: `${timeShort} น.`,
+        checkOutLocation: defaultLoc,
+        duration: calculateDuration(existingSessions[activeSessionIndex].checkInTime, `${timeShort} น.`),
+        status: 'completed',
+        notes: `Check-out ออกงานครั้งที่ ${sessionNumber} เรียบร้อย`
+      };
+      updatedSessions = [
+        ...existingSessions.slice(0, activeSessionIndex),
+        closedSession,
+        ...existingSessions.slice(activeSessionIndex + 1)
+      ];
+    } else {
+      sessionNumber = existingSessions.length > 0 ? existingSessions[existingSessions.length - 1].sessionNumber : 1;
+      const lastSession = existingSessions[existingSessions.length - 1] || {
+        sessionNumber: 1,
+        checkInTime: '08:30 น.',
+        checkInLocation: defaultLoc
+      };
+      const closedSession: AttendanceSession = {
+        ...lastSession,
+        checkOutTime: `${timeShort} น.`,
+        checkOutLocation: defaultLoc,
+        duration: calculateDuration(lastSession.checkInTime, `${timeShort} น.`),
+        status: 'completed',
+        notes: `Check-out ออกงานครั้งที่ ${sessionNumber} เรียบร้อย`
+      };
+      updatedSessions = [
+        ...existingSessions.slice(0, existingSessions.length - 1),
+        closedSession
+      ];
+    }
+
+    const totalHours = calculateTotalWorkingHours(updatedSessions);
+    const newRecord: EngineerDailyAttendance = {
+      id: existing ? existing.id : `att-${eng.id}-${Date.now()}`,
       engineerId: eng.id,
       engineerName: eng.name,
       date: todayIso,
-      checkInTime: '08:30 น.',
-      checkInLocation: 'สำนักงานใหญ่ LUMENCRAFT'
-    };
-
-    const newRecord: EngineerDailyAttendance = {
-      ...existing,
+      checkInTime: updatedSessions[0]?.checkInTime || '08:30 น.',
       checkOutTime: `${timeShort} น.`,
-      checkOutLocation: eng.currentLocation ? eng.currentLocation.siteName : 'สำนักงานใหญ่ LUMENCRAFT พัฒนาการ',
-      totalHours: '8 ชม. 30 นาที',
+      checkOutLocation: defaultLoc,
+      totalHours: totalHours || '8 ชม. 30 นาที',
       status: 'completed',
-      notes: `Check-out บันทึกเวลากลับเสร็จสมบูรณ์`
+      notes: `Check-out บันทึกเวลากลับครั้งที่ ${sessionNumber} เรียบร้อย`,
+      sessions: updatedSessions
     };
 
     const updated = [
@@ -146,8 +301,8 @@ export const EngineerStatusModal: React.FC<EngineerStatusModalProps> = ({
     if (onSaveAttendance) onSaveAttendance(newRecord);
     if (onUpdateStatus) onUpdateStatus(eng.id, 'active');
 
-    setActionSuccessMsg(`บันทึก Check-Out ช่าง${eng.name} สำเร็จเวลา ${timeShort} น. (เปลี่ยนเป็นสีเขียว: พร้อมรับงาน)`);
-    setTimeout(() => setActionSuccessMsg(null), 3500);
+    setActionSuccessMsg(`บันทึก Check-Out ช่าง${eng.name} ครั้งที่ ${sessionNumber} สำเร็จเวลา ${timeShort} น. (เปลี่ยนเป็นสีเขียว: พร้อมรับงาน)`);
+    setTimeout(() => setActionSuccessMsg(null), 4000);
   };
 
   const getEngineerAttendance = (engId: string): EngineerDailyAttendance | undefined => {
@@ -159,7 +314,7 @@ export const EngineerStatusModal: React.FC<EngineerStatusModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-5xl w-full border border-slate-200 overflow-hidden flex flex-col max-h-[92vh]">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-6xl w-full border border-slate-200 overflow-hidden flex flex-col max-h-[94vh]">
         
         {/* Modal Header with Live Clock */}
         <div className="bg-slate-900 text-white px-6 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -176,7 +331,7 @@ export const EngineerStatusModal: React.FC<EngineerStatusModalProps> = ({
                 </span>
               </h3>
               <p className="text-xs text-slate-300">
-                สถานะรายวันมี Check-in, Check-out และแสดงเวลาปฏิบัติงานจริง (4 วิศวกร LUMENCRAFT)
+                ระบบเก็บบันทึก Log เวลา Check-in และ Check-out ทุกครั้ง (แยกเป็นครั้งที่ 1, 2, 3, 4 เวลาไม่ถูกแทนที่)
               </p>
             </div>
           </div>
@@ -199,7 +354,7 @@ export const EngineerStatusModal: React.FC<EngineerStatusModalProps> = ({
             <button
               id="btn-close-engineer-status"
               onClick={onClose}
-              className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition"
+              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
               title="ปิดหน้าต่าง"
             >
               <X className="w-5 h-5" />
@@ -207,60 +362,57 @@ export const EngineerStatusModal: React.FC<EngineerStatusModalProps> = ({
           </div>
         </div>
 
-        {/* Action Feedback Banner */}
+        {/* Live Notification Bar if any check-in / check-out happens */}
         {actionSuccessMsg && (
-          <div className="bg-emerald-600 text-white px-6 py-2 text-xs font-bold flex items-center justify-between animate-fadeIn">
+          <div className="bg-emerald-600 text-white px-6 py-2 text-xs font-bold flex items-center justify-between animate-fadeIn shadow-inner">
             <span className="flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4" />
+              <CheckCircle2 className="w-4 h-4 text-emerald-200 shrink-0" />
               {actionSuccessMsg}
             </span>
-            <button onClick={() => setActionSuccessMsg(null)} className="text-emerald-200 hover:text-white">✕</button>
+            <span className="text-[10px] bg-emerald-800 px-2 py-0.5 rounded text-emerald-100">Live Updated</span>
           </div>
         )}
 
-        {/* View Mode Controls & Live Time Indicators */}
-        <div className="bg-slate-50 border-b border-slate-200 px-6 py-3 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center space-x-2">
-            <span className="text-xs font-semibold text-slate-700">รูปแบบการแสดงผล:</span>
-            <div className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5 shadow-sm">
-              <button
-                id="btn-view-daily"
-                onClick={() => setViewMode('daily')}
-                className={`px-3 py-1.5 rounded-md text-xs font-semibold transition ${
-                  viewMode === 'daily'
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                รายวัน (Daily Check-in/Out)
-              </button>
-              <button
-                id="btn-view-hourly"
-                onClick={() => setViewMode('hourly')}
-                className={`px-3 py-1.5 rounded-md text-xs font-semibold transition ${
-                  viewMode === 'hourly'
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                รายชั่วโมง (Hourly)
-              </button>
-              <button
-                id="btn-view-weekly"
-                onClick={() => setViewMode('weekly')}
-                className={`px-3 py-1.5 rounded-md text-xs font-semibold transition ${
-                  viewMode === 'weekly'
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                รายสัปดาห์ (Weekly)
-              </button>
-            </div>
+        {/* Navigation & Controls Bar */}
+        <div className="bg-slate-50 border-b border-slate-200 px-6 py-3 flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center space-x-1.5 bg-slate-200/80 p-1 rounded-xl">
+            <button
+              onClick={() => setViewMode('daily')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                viewMode === 'daily'
+                  ? 'bg-white text-slate-900 shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Calendar className="w-3.5 h-3.5 text-indigo-600" />
+              ตารางบันทึกประจำวัน (4 ครั้ง)
+            </button>
+            <button
+              onClick={() => setViewMode('hourly')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                viewMode === 'hourly'
+                  ? 'bg-white text-slate-900 shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Timer className="w-3.5 h-3.5 text-amber-600" />
+              ช่วงเวลาปฏิบัติงาน (Timeline รายชั่วโมง)
+            </button>
+            <button
+              onClick={() => setViewMode('weekly')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                viewMode === 'weekly'
+                  ? 'bg-white text-slate-900 shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <History className="w-3.5 h-3.5 text-blue-600" />
+              สรุปภาพรวมประจำสัปดาห์
+            </button>
           </div>
 
-          {/* Color Legend */}
-          <div className="flex items-center gap-2 sm:gap-3 text-xs flex-wrap">
+          <div className="flex items-center gap-2 text-xs">
+            <span className="text-slate-500 font-medium">สัญลักษณ์สถานะ:</span>
             <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-medium">
               <span className="w-2 h-2 rounded-full bg-emerald-500"></span> ว่าง (เขียว)
             </span>
@@ -276,15 +428,19 @@ export const EngineerStatusModal: React.FC<EngineerStatusModalProps> = ({
         {/* Content Area */}
         <div className="p-6 overflow-y-auto flex-1 space-y-6">
           
-          {/* 4 Engineers Cards with Check-In / Check-Out and Time Information */}
+          {/* 4 Engineers Cards with 4-Session Logs Display */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {engineers.map(eng => {
               const badge = getStatusBadge(eng.workStatus);
-              const att = getEngineerAttendance(eng.id);
+              const sessions = getEngineerSessions(eng.id);
+              const activeSession = sessions.find(s => !s.checkOutTime);
+              const isCheckedIn = !!activeSession || eng.workStatus === 'busy';
+              const nextSessionNum = activeSession ? activeSession.sessionNumber : Math.min(sessions.length + 1, 4);
+
               return (
                 <div
                   key={eng.id}
-                  className={`rounded-xl border p-4 shadow-sm flex flex-col justify-between transition hover:shadow-md ${
+                  className={`rounded-2xl border p-4 shadow-sm flex flex-col justify-between transition hover:shadow-md ${
                     eng.workStatus === 'busy'
                       ? 'border-rose-300 bg-rose-50/20'
                       : eng.workStatus === 'waiting'
@@ -293,6 +449,7 @@ export const EngineerStatusModal: React.FC<EngineerStatusModalProps> = ({
                   }`}
                 >
                   <div>
+                    {/* Header with Avatar and Live Dot */}
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center space-x-2">
                         <div className="w-9 h-9 rounded-full bg-slate-800 text-white font-bold flex items-center justify-center text-sm shadow">
@@ -306,75 +463,129 @@ export const EngineerStatusModal: React.FC<EngineerStatusModalProps> = ({
                       <span className={`w-3.5 h-3.5 rounded-full shadow ${badge.color}`}></span>
                     </div>
 
-                    <div className={`mt-2 px-2.5 py-1.5 rounded-lg border text-xs font-semibold ${badge.badgeBg}`}>
-                      {badge.label}
+                    <div className={`mt-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-semibold flex items-center justify-between ${badge.badgeBg}`}>
+                      <span>{badge.label}</span>
+                      <span className="text-[10px] opacity-80">
+                        {isCheckedIn ? `(รอบที่ ${nextSessionNum})` : `(ว่าง)`}
+                      </span>
                     </div>
 
-                    {/* Daily Attendance & Time Display (Check-in / Check-out) */}
-                    <div className="mt-3 bg-white/95 rounded-xl p-3 border border-slate-200/90 space-y-2 text-xs shadow-xs">
+                    {/* 4-Session Log Display: ครั้งที่ 1, ครั้งที่ 2, ครั้งที่ 3, ครั้งที่ 4 */}
+                    <div className="mt-3 bg-white/95 rounded-xl p-3 border border-slate-200 space-y-2 text-xs shadow-xs">
                       <div className="text-[11px] font-bold text-slate-800 border-b border-slate-100 pb-1.5 flex items-center justify-between">
                         <span className="flex items-center gap-1 text-indigo-700">
-                          <Timer className="w-3.5 h-3.5" /> บันทึกเวลาประจำวัน
+                          <Layers className="w-3.5 h-3.5" /> Log บันทึกเวลา 4 ครั้ง (ไม่แทนที่)
                         </span>
-                        <span className="text-[10px] text-slate-400 font-normal">วันนี้</span>
+                        <span className="text-[10px] text-slate-500 font-mono">
+                          {sessions.length}/4 ครั้ง
+                        </span>
                       </div>
 
-                      {/* Check-In Time */}
-                      <div className="flex items-center justify-between">
-                        <span className="text-slate-500 font-medium flex items-center gap-1 text-[11px]">
-                          <LogIn className="w-3 h-3 text-emerald-600" /> Check-in:
-                        </span>
-                        <strong className={`font-mono text-xs ${att?.status === 'checked_in' || eng.workStatus === 'busy' ? 'text-rose-600 font-black' : 'text-emerald-700'}`}>
-                          {att?.checkInTime || '08:30 น.'}
-                        </strong>
+                      {/* 4 Sessions List */}
+                      <div className="space-y-1.5">
+                        {[1, 2, 3, 4].map(roundNum => {
+                          const sess = sessions.find(s => s.sessionNumber === roundNum);
+                          const isSessionActive = sess && !sess.checkOutTime;
+
+                          return (
+                            <div
+                              key={roundNum}
+                              className={`p-1.5 rounded-lg border text-[11px] transition ${
+                                isSessionActive
+                                  ? 'bg-rose-50 border-rose-300 text-rose-900 ring-1 ring-rose-400'
+                                  : sess
+                                  ? 'bg-slate-50/90 border-slate-200 text-slate-800'
+                                  : 'bg-slate-50/40 border-dashed border-slate-200 text-slate-400'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between font-bold text-[10px]">
+                                <span className="flex items-center gap-1">
+                                  <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold ${
+                                    isSessionActive
+                                      ? 'bg-rose-600 text-white'
+                                      : sess
+                                      ? 'bg-indigo-600 text-white'
+                                      : 'bg-slate-200 text-slate-500'
+                                  }`}>
+                                    {roundNum}
+                                  </span>
+                                  ครั้งที่ {roundNum}
+                                </span>
+                                {isSessionActive ? (
+                                  <span className="text-rose-600 font-bold flex items-center gap-1">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping"></span>
+                                    กำลังทำงาน
+                                  </span>
+                                ) : sess?.duration ? (
+                                  <span className="text-emerald-700 font-mono text-[9px] font-bold bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
+                                    {sess.duration}
+                                  </span>
+                                ) : (
+                                  <span className="text-slate-400 text-[9px]">รอดำเนินการ</span>
+                                )}
+                              </div>
+
+                              {sess ? (
+                                <div className="mt-1 grid grid-cols-2 gap-1 text-[10px] font-mono">
+                                  <div className="flex items-center gap-1 text-emerald-700 bg-white/70 px-1 py-0.5 rounded">
+                                    <LogIn className="w-2.5 h-2.5" />
+                                    <span>เข้า: {sess.checkInTime}</span>
+                                  </div>
+                                  <div className="flex items-center gap-1 text-slate-700 bg-white/70 px-1 py-0.5 rounded">
+                                    <LogOut className="w-2.5 h-2.5" />
+                                    <span>ออก: {sess.checkOutTime || 'กำลังทำ...'}</span>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="mt-0.5 text-[9px] text-slate-400 italic text-center">
+                                  ยังไม่มีการลงเวลา
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
 
-                      {/* Check-Out Time */}
-                      <div className="flex items-center justify-between">
-                        <span className="text-slate-500 font-medium flex items-center gap-1 text-[11px]">
-                          <LogOut className="w-3 h-3 text-slate-600" /> Check-out:
-                        </span>
-                        <strong className="text-slate-700 font-mono text-xs">
-                          {att?.checkOutTime || (att?.status === 'checked_in' || eng.workStatus === 'busy' ? 'กำลังปฏิบัติงาน...' : '17:30 น.')}
-                        </strong>
-                      </div>
-
-                      {/* Total Duration */}
-                      <div className="flex items-center justify-between pt-1 border-t border-slate-100 text-[11px]">
-                        <span className="text-slate-500 font-medium">รวมเวลาทำงาน:</span>
-                        <span className="font-bold text-indigo-900 bg-indigo-50 px-2 py-0.5 rounded text-[10px]">
-                          {att?.totalHours || (att?.status === 'checked_in' || eng.workStatus === 'busy' ? 'กำลังปฏิบัติงาน' : '9 ชม. 00 นาที')}
+                      {/* Cumulative Total Duration */}
+                      <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-[11px]">
+                        <span className="text-slate-600 font-medium">รวมเวลาปฏิบัติงาน:</span>
+                        <span className="font-bold text-indigo-950 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded text-[10px]">
+                          {calculateTotalWorkingHours(sessions)}
                         </span>
                       </div>
 
                       {/* Check-in / Out Action Buttons - Button turns from Green to Red upon Check-In */}
                       <div className="pt-2 flex gap-1.5">
-                        {(() => {
-                          const isCheckedIn = att?.status === 'checked_in' || eng.workStatus === 'busy';
-                          return (
-                            <button
-                              type="button"
-                              onClick={() => handleCheckIn(eng)}
-                              className={`flex-1 inline-flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg font-bold text-[10px] shadow-xs transition cursor-pointer ${
-                                isCheckedIn
-                                  ? 'bg-rose-600 hover:bg-rose-700 text-white ring-2 ring-rose-400/40 animate-pulse'
-                                  : 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                              }`}
-                              title={isCheckedIn ? 'Check-in แล้ว (สถานะสีแดง: กำลังทำงานหน้างาน)' : 'กด Check-in เพื่อเข้างาน (จะเปลี่ยนเป็นสีแดง)'}
-                            >
-                              <LogIn className="w-3 h-3" />
-                              <span>{isCheckedIn ? 'Check-in แล้ว (แดง)' : 'Check-in (เขียว)'}</span>
-                            </button>
-                          );
-                        })()}
+                        <button
+                          type="button"
+                          onClick={() => handleCheckIn(eng)}
+                          className={`flex-1 inline-flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg font-bold text-[10px] shadow-xs transition cursor-pointer ${
+                            isCheckedIn
+                              ? 'bg-rose-600 hover:bg-rose-700 text-white ring-2 ring-rose-400/40 animate-pulse'
+                              : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                          }`}
+                          title={
+                            isCheckedIn
+                              ? `Check-in แล้ว (ครั้งที่ ${nextSessionNum} สีแดง: กำลังปฏิบัติงาน)`
+                              : `กด Check-in เข้างานครั้งที่ ${nextSessionNum} (จะเปลี่ยนเป็นสีแดง)`
+                          }
+                        >
+                          <LogIn className="w-3 h-3" />
+                          <span>
+                            {isCheckedIn
+                              ? `Check-in แล้ว (ครั้งที่ ${nextSessionNum})`
+                              : `Check-in ครั้งที่ ${nextSessionNum}`}
+                          </span>
+                        </button>
+
                         <button
                           type="button"
                           onClick={() => handleCheckOut(eng)}
                           className="flex-1 inline-flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-bold text-[10px] shadow-xs transition cursor-pointer"
-                          title="บันทึกเวลา Check-out บันทึกกลับ (เปลี่ยนเป็นสีเขียว: ว่าง)"
+                          title={`บันทึกเวลา Check-out ออกงานครั้งที่ ${nextSessionNum} (เปลี่ยนเป็นสีเขียว: พร้อมรับงาน)`}
                         >
                           <LogOut className="w-3 h-3" />
-                          Check-out
+                          <span>Check-out</span>
                         </button>
                       </div>
                     </div>
@@ -401,34 +612,34 @@ export const EngineerStatusModal: React.FC<EngineerStatusModalProps> = ({
                       <div className="flex gap-1">
                         <button
                           onClick={() => onUpdateStatus(eng.id, 'active')}
-                          className={`w-6 h-6 rounded-md text-[10px] font-bold border transition ${
+                          className={`w-6 h-6 rounded-md text-[10px] font-bold border transition cursor-pointer ${
                             eng.workStatus === 'active'
                               ? 'bg-emerald-600 text-white border-emerald-600'
                               : 'bg-white text-emerald-700 border-emerald-200 hover:bg-emerald-50'
                           }`}
-                          title="ว่าง"
+                          title="ว่าง (เขียว)"
                         >
                           เขียว
                         </button>
                         <button
                           onClick={() => onUpdateStatus(eng.id, 'waiting')}
-                          className={`w-6 h-6 rounded-md text-[10px] font-bold border transition ${
+                          className={`w-6 h-6 rounded-md text-[10px] font-bold border transition cursor-pointer ${
                             eng.workStatus === 'waiting'
                               ? 'bg-amber-500 text-white border-amber-500'
                               : 'bg-white text-amber-700 border-amber-200 hover:bg-amber-50'
                           }`}
-                          title="รองาน"
+                          title="รองาน (เหลือง)"
                         >
                           เหลือง
                         </button>
                         <button
                           onClick={() => onUpdateStatus(eng.id, 'busy')}
-                          className={`w-6 h-6 rounded-md text-[10px] font-bold border transition ${
+                          className={`w-6 h-6 rounded-md text-[10px] font-bold border transition cursor-pointer ${
                             eng.workStatus === 'busy'
                               ? 'bg-rose-600 text-white border-rose-600'
                               : 'bg-white text-rose-700 border-rose-200 hover:bg-rose-50'
                           }`}
-                          title="กำลังทำงาน"
+                          title="กำลังทำงาน (แดง)"
                         >
                           แดง
                         </button>
@@ -445,7 +656,7 @@ export const EngineerStatusModal: React.FC<EngineerStatusModalProps> = ({
             <div className="bg-slate-100 px-4 py-2.5 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
               <h4 className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
                 <Clock className="w-4 h-4 text-blue-600" />
-                {viewMode === 'daily' && `ตารางบันทึกสถานะรายวัน (Daily Check-in / Check-out & Working Hours Summary)`}
+                {viewMode === 'daily' && `ตารางบันทึกสถานะรายวัน แยก 4 ครั้ง (Daily Check-in & Check-out Logs: ครั้งที่ 1, 2, 3, 4)`}
                 {viewMode === 'hourly' && `ตารางเวลาช่วงเวลาปฏิบัติงานประจำวัน (Hourly Schedule: วันนี้ ${dateString})`}
                 {viewMode === 'weekly' && 'ตารางสรุปภาพรวมรายสัปดาห์ (Weekly View: สิงหาคม 2026)'}
               </h4>
@@ -463,18 +674,23 @@ export const EngineerStatusModal: React.FC<EngineerStatusModalProps> = ({
                   <thead>
                     <tr className="border-b border-slate-200 text-slate-600 bg-slate-50 font-bold uppercase tracking-wider text-[11px]">
                       <th className="py-3 px-3">วิศวกร</th>
-                      <th className="py-3 px-3">สถานะความพร้อม</th>
-                      <th className="py-3 px-3">เวลา Check-in</th>
-                      <th className="py-3 px-3">เวลา Check-out</th>
-                      <th className="py-3 px-3">ระยะเวลาทำงานรวม</th>
-                      <th className="py-3 px-3">สถานที่ / ไซต์งาน</th>
+                      <th className="py-3 px-3">สถานะ</th>
+                      <th className="py-3 px-2 text-center">ครั้งที่ 1 (เข้า-ออก)</th>
+                      <th className="py-3 px-2 text-center">ครั้งที่ 2 (เข้า-ออก)</th>
+                      <th className="py-3 px-2 text-center">ครั้งที่ 3 (เข้า-ออก)</th>
+                      <th className="py-3 px-2 text-center">ครั้งที่ 4 (เข้า-ออก)</th>
+                      <th className="py-3 px-3 text-center">เวลารวม</th>
                       <th className="py-3 px-3 text-right">ดำเนินการ</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {engineers.map(eng => {
                       const badge = getStatusBadge(eng.workStatus);
-                      const att = getEngineerAttendance(eng.id);
+                      const sessions = getEngineerSessions(eng.id);
+                      const activeSession = sessions.find(s => !s.checkOutTime);
+                      const isCheckedIn = !!activeSession || eng.workStatus === 'busy';
+                      const nextSessionNum = activeSession ? activeSession.sessionNumber : Math.min(sessions.length + 1, 4);
+
                       return (
                         <tr key={eng.id} className="hover:bg-slate-50/80 transition">
                           <td className="py-3 px-3 font-bold text-slate-900">
@@ -486,53 +702,75 @@ export const EngineerStatusModal: React.FC<EngineerStatusModalProps> = ({
                             </div>
                           </td>
                           <td className="py-3 px-3">
-                            <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold ${badge.badgeBg}`}>
-                              <span className={`w-2 h-2 rounded-full ${badge.dot}`}></span>
+                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${badge.badgeBg}`}>
+                              <span className={`w-1.5 h-1.5 rounded-full ${badge.dot}`}></span>
                               {badge.label}
                             </span>
                           </td>
-                          <td className="py-3 px-3 font-mono font-bold text-emerald-700">
-                            {att?.checkInTime || '08:30 น.'}
-                          </td>
-                          <td className="py-3 px-3 font-mono font-bold text-slate-700">
-                            {att?.checkOutTime || (att?.status === 'checked_in' ? 'กำลังปฏิบัติงาน...' : '17:30 น.')}
-                          </td>
-                          <td className="py-3 px-3 font-medium text-indigo-900">
-                            <span className="bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded text-[11px]">
-                              {att?.totalHours || '9 ชม. 00 นาที'}
+
+                          {/* Sessions 1, 2, 3, 4 columns */}
+                          {[1, 2, 3, 4].map(roundNum => {
+                            const s = sessions.find(sess => sess.sessionNumber === roundNum);
+                            const isActive = s && !s.checkOutTime;
+
+                            return (
+                              <td key={roundNum} className="py-3 px-2 text-center">
+                                {s ? (
+                                  <div className={`p-1.5 rounded-lg border text-[10px] font-mono inline-block text-left ${
+                                    isActive
+                                      ? 'bg-rose-50 border-rose-300 text-rose-900 ring-1 ring-rose-400'
+                                      : 'bg-slate-50 border-slate-200 text-slate-700'
+                                  }`}>
+                                    <div className="text-emerald-700 font-bold flex items-center gap-1">
+                                      <LogIn className="w-2.5 h-2.5" /> {s.checkInTime}
+                                    </div>
+                                    <div className="text-slate-600 flex items-center gap-1">
+                                      <LogOut className="w-2.5 h-2.5" /> {s.checkOutTime || 'กำลังทำ...'}
+                                    </div>
+                                    {s.duration && (
+                                      <div className="text-[9px] text-indigo-700 font-sans font-medium pt-0.5 border-t border-slate-200/60">
+                                        ({s.duration})
+                                      </div>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <span className="text-slate-300 text-xs font-mono">-</span>
+                                )}
+                              </td>
+                            );
+                          })}
+
+                          <td className="py-3 px-3 text-center font-medium text-indigo-900">
+                            <span className="bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded text-[11px] font-bold">
+                              {calculateTotalWorkingHours(sessions)}
                             </span>
                           </td>
-                          <td className="py-3 px-3 text-slate-600">
-                            <span className="flex items-center gap-1 text-[11px]">
-                              <MapPin className="w-3 h-3 text-rose-500 shrink-0" />
-                              {att?.checkInLocation || eng.currentLocation?.siteName || 'สำนักงานใหญ่ LUMENCRAFT'}
-                            </span>
-                          </td>
+
                           <td className="py-3 px-3 text-right">
                             <div className="flex items-center justify-end gap-1.5">
-                              {(() => {
-                                const isCheckedIn = att?.status === 'checked_in' || eng.workStatus === 'busy';
-                                return (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleCheckIn(eng)}
-                                    className={`px-3 py-1 rounded-lg text-[10px] font-bold transition flex items-center gap-1 shadow-2xs cursor-pointer ${
-                                      isCheckedIn
-                                        ? 'bg-rose-600 hover:bg-rose-700 text-white ring-1 ring-rose-400'
-                                        : 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                                    }`}
-                                    title={isCheckedIn ? 'Check-in แล้ว (แดง: กำลังทำงาน)' : 'กด Check-in เข้างาน (เขียว)'}
-                                  >
-                                    <LogIn className="w-3 h-3" />
-                                    {isCheckedIn ? 'Check-in แล้ว (แดง)' : 'Check-in (เขียว)'}
-                                  </button>
-                                );
-                              })()}
+                              <button
+                                type="button"
+                                onClick={() => handleCheckIn(eng)}
+                                className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition flex items-center gap-1 shadow-2xs cursor-pointer ${
+                                  isCheckedIn
+                                    ? 'bg-rose-600 hover:bg-rose-700 text-white ring-1 ring-rose-400'
+                                    : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                                }`}
+                                title={
+                                  isCheckedIn
+                                    ? `Check-in แล้ว (ครั้งที่ ${nextSessionNum})`
+                                    : `กด Check-in เข้างานครั้งที่ ${nextSessionNum}`
+                                }
+                              >
+                                <LogIn className="w-3 h-3" />
+                                {isCheckedIn ? `Check-in แล้ว (${nextSessionNum})` : `Check-in (${nextSessionNum})`}
+                              </button>
+
                               <button
                                 type="button"
                                 onClick={() => handleCheckOut(eng)}
                                 className="px-2.5 py-1 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 text-[10px] font-bold transition flex items-center gap-1 shadow-2xs cursor-pointer"
-                                title="Check-out บันทึกเวลากลับ"
+                                title={`Check-out ออกงานครั้งที่ ${nextSessionNum}`}
                               >
                                 <LogOut className="w-3 h-3" />
                                 Check-out

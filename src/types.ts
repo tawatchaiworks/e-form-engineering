@@ -207,17 +207,29 @@ export interface StaffMember {
   };
 }
 
+export interface AttendanceSession {
+  sessionNumber: number; // 1, 2, 3, 4 (ครั้งที่ 1, ครั้งที่ 2, ครั้งที่ 3, ครั้งที่ 4)
+  checkInTime: string; // e.g. "08:30 น."
+  checkInLocation?: string;
+  checkOutTime?: string; // e.g. "12:00 น."
+  checkOutLocation?: string;
+  duration?: string; // e.g. "3 ชม. 30 นาที"
+  status?: 'checked_in' | 'completed';
+  notes?: string;
+}
+
 export interface EngineerDailyAttendance {
   id: string;
   engineerId: string;
   engineerName: string;
   date: string; // YYYY-MM-DD
-  checkInTime?: string; // e.g. "08:30"
-  checkOutTime?: string; // e.g. "17:30"
+  checkInTime?: string; // e.g. "08:30 น." (First or Latest check-in)
+  checkOutTime?: string; // e.g. "17:30 น." (Latest check-out)
   checkInLocation?: string;
   checkOutLocation?: string;
   totalHours?: string;
   status: 'checked_in' | 'working' | 'completed' | 'not_started' | 'leave';
   notes?: string;
+  sessions?: AttendanceSession[]; // Log เวลา check-in และ check-out ทุกครั้ง แยกเป็นครั้งที่ 1, ครั้งที่ 2, ครั้งที่ 3, ครั้งที่ 4 (ไม่ถูกแทนที่)
 }
 

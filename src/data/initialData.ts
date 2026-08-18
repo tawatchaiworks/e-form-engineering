@@ -1433,9 +1433,31 @@ export const INITIAL_ATTENDANCE: EngineerDailyAttendance[] = [
     checkOutTime: '17:35 น.',
     checkInLocation: 'One Bangkok, พระราม 4',
     checkOutLocation: 'One Bangkok, พระราม 4',
-    totalHours: '9 ชม. 10 นาที',
+    totalHours: '8 ชม. 10 นาที',
     status: 'completed',
-    notes: 'Service ระบบไฟ DALI ประสบความสำเร็จ'
+    notes: 'Service ระบบไฟ DALI ประสบความสำเร็จ',
+    sessions: [
+      {
+        sessionNumber: 1,
+        checkInTime: '08:25 น.',
+        checkInLocation: 'One Bangkok, พระราม 4',
+        checkOutTime: '12:00 น.',
+        checkOutLocation: 'One Bangkok, พระราม 4',
+        duration: '3 ชม. 35 นาที',
+        status: 'completed',
+        notes: 'ช่วงเช้า: ตรวจเช็คสายสัญญาณและ Driver ไฟ DALI'
+      },
+      {
+        sessionNumber: 2,
+        checkInTime: '13:00 น.',
+        checkInLocation: 'One Bangkok, พระราม 4',
+        checkOutTime: '17:35 น.',
+        checkOutLocation: 'One Bangkok, พระราม 4',
+        duration: '4 ชม. 35 นาที',
+        status: 'completed',
+        notes: 'ช่วงบ่าย: Commissioning ระบบ Scene Control และส่งมอบ'
+      }
+    ]
   },
   {
     id: 'att-eng-2',
@@ -1446,9 +1468,31 @@ export const INITIAL_ATTENDANCE: EngineerDailyAttendance[] = [
     checkOutTime: '17:30 น.',
     checkInLocation: 'สำนักงานใหญ่ LUMENCRAFT',
     checkOutLocation: 'สำนักงานใหญ่ LUMENCRAFT',
-    totalHours: '9 ชม. 00 นาที',
+    totalHours: '8 ชม. 00 นาที',
     status: 'completed',
-    notes: 'Standby เตรียมของและอุปกรณ์ตรวจวัด'
+    notes: 'Standby เตรียมของและอุปกรณ์ตรวจวัด',
+    sessions: [
+      {
+        sessionNumber: 1,
+        checkInTime: '08:30 น.',
+        checkInLocation: 'สำนักงานใหญ่ LUMENCRAFT พัฒนาการ',
+        checkOutTime: '12:00 น.',
+        checkOutLocation: 'สำนักงานใหญ่ LUMENCRAFT พัฒนาการ',
+        duration: '3 ชม. 30 นาที',
+        status: 'completed',
+        notes: 'เตรียมโคมไฟ Mock-up และทดสอบสเปก'
+      },
+      {
+        sessionNumber: 2,
+        checkInTime: '13:00 น.',
+        checkInLocation: 'สำนักงานใหญ่ LUMENCRAFT พัฒนาการ',
+        checkOutTime: '17:30 น.',
+        checkOutLocation: 'สำนักงานใหญ่ LUMENCRAFT พัฒนาการ',
+        duration: '4 ชม. 30 นาที',
+        status: 'completed',
+        notes: 'ถอดแบบและคำนวณกำลังไฟโคม'
+      }
+    ]
   },
   {
     id: 'att-eng-3',
@@ -1459,9 +1503,31 @@ export const INITIAL_ATTENDANCE: EngineerDailyAttendance[] = [
     checkOutTime: '17:45 น.',
     checkInLocation: 'Dusit Central Park',
     checkOutLocation: 'Dusit Central Park',
-    totalHours: '9 ชม. 05 นาที',
+    totalHours: '8 ชม. 05 นาที',
     status: 'completed',
-    notes: 'เข้าร่วมประชุมแบบและหน้างาน'
+    notes: 'เข้าร่วมประชุมแบบและหน้างาน',
+    sessions: [
+      {
+        sessionNumber: 1,
+        checkInTime: '08:40 น.',
+        checkInLocation: 'Dusit Central Park',
+        checkOutTime: '12:15 น.',
+        checkOutLocation: 'Dusit Central Park',
+        duration: '3 ชม. 35 นาที',
+        status: 'completed',
+        notes: 'เข้าประชุมประสานงานกับผู้รับเหมาหลัก'
+      },
+      {
+        sessionNumber: 2,
+        checkInTime: '13:15 น.',
+        checkInLocation: 'Dusit Central Park',
+        checkOutTime: '17:45 น.',
+        checkOutLocation: 'Dusit Central Park',
+        duration: '4 ชม. 30 นาที',
+        status: 'completed',
+        notes: 'ตรวจสอบจุดติดตั้งรางไฟหน้างาน'
+      }
+    ]
   },
   {
     id: 'att-eng-4',
@@ -1472,9 +1538,31 @@ export const INITIAL_ATTENDANCE: EngineerDailyAttendance[] = [
     checkOutTime: '18:00 น.',
     checkInLocation: 'The Forestias บางนา',
     checkOutLocation: 'The Forestias บางนา',
-    totalHours: '9 ชม. 45 นาที',
+    totalHours: '8 ชม. 45 นาที',
     status: 'completed',
-    notes: 'Mock up ไฟ Façade และทดสอบ Dimming'
+    notes: 'Mock up ไฟ Façade และทดสอบ Dimming',
+    sessions: [
+      {
+        sessionNumber: 1,
+        checkInTime: '08:15 น.',
+        checkInLocation: 'The Forestias บางนา',
+        checkOutTime: '12:00 น.',
+        checkOutLocation: 'The Forestias บางนา',
+        duration: '3 ชม. 45 นาที',
+        status: 'completed',
+        notes: 'ติดตั้งชุดทดสอบไฟ Façade'
+      },
+      {
+        sessionNumber: 2,
+        checkInTime: '13:00 น.',
+        checkInLocation: 'The Forestias บางนา',
+        checkOutTime: '18:00 น.',
+        checkOutLocation: 'The Forestias บางนา',
+        duration: '5 ชม. 00 นาที',
+        status: 'completed',
+        notes: 'ทดสอบการหรี่แสงไฟและเอฟเฟกต์ยามค่ำคืน'
+      }
+    ]
   }
 ];
 
