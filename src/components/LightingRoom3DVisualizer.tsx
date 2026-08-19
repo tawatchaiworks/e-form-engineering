@@ -19,7 +19,16 @@ import {
   RefreshCcw,
   CheckCircle2,
   AlertCircle,
-  X
+  X,
+  Trash2,
+  Plus,
+  SlidersHorizontal,
+  Grid,
+  Eye,
+  EyeOff,
+  Power,
+  Info,
+  Settings
 } from 'lucide-react';
 
 export interface LightingRoom3DVisualizerProps {
@@ -89,21 +98,38 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
   const [showDimensions, setShowDimensions] = useState<boolean>(true);
   const [selectedFixtureIdx, setSelectedFixtureIdx] = useState<number | null>(null);
 
+  // 📐 Fixture Spacing Mode: 'auto' (Symmetric Grid Calculation) vs 'custom' (Specify Exact Spacing in Meters)
+  const [spacingMode, setSpacingMode] = useState<'auto' | 'custom'>('auto');
+  const [customSpacingX, setCustomSpacingX] = useState<number>(() => Number((roomLength / Math.max(1, fixtureRows)).toFixed(2)));
+  const [customSpacingY, setCustomSpacingY] = useState<number>(() => Number((roomWidth / Math.max(1, fixtureCols)).toFixed(2)));
+  const [customWallSpacingX, setCustomWallSpacingX] = useState<number>(() => Number(((roomLength / Math.max(1, fixtureRows)) / 2).toFixed(2)));
+  const [customWallSpacingY, setCustomWallSpacingY] = useState<number>(() => Number(((roomWidth / Math.max(1, fixtureCols)) / 2).toFixed(2)));
+
+  // Drawer / Sub-panel toggles
+  const [showSpacingDrawer, setShowSpacingDrawer] = useState<boolean>(false);
+  const [showFixtureDrawer, setShowFixtureDrawer] = useState<boolean>(false);
+
+  // 🗑️ Excluded / Deleted Specific Individual Fixtures Set
+  const [deletedFixtureIds, setDeletedFixtureIds] = useState<string[]>([]);
+  const [inspectedFixtureId, setInspectedFixtureId] = useState<string | null>(null);
+
   // Interactive Hover Lux Sensor Probe
   const [hoverProbePos, setHoverProbePos] = useState<{ x: number; y: number; lux: number } | null>(null);
 
-  // Derived Spacing Calculations
-  const spacingLength = roomLength / Math.max(1, fixtureRows);
-  const spacingWidth = roomWidth / Math.max(1, fixtureCols);
-  const wallSpacingLength = spacingLength / 2;
-  const wallSpacingWidth = spacingWidth / 2;
-  const totalFixtures = fixtureRows * fixtureCols;
+  // Derived Auto Spacing Calculations
+  const autoSpacingLength = roomLength / Math.max(1, fixtureRows);
+  const autoSpacingWidth = roomWidth / Math.max(1, fixtureCols);
+  const autoWallSpacingLength = autoSpacingLength / 2;
+  const autoWallSpacingWidth = autoSpacingWidth / 2;
+
+  // Active Spacing Values based on Mode
+  const spacingLength = spacingMode === 'auto' ? autoSpacingLength : Math.max(0.1, customSpacingX);
+  const spacingWidth = spacingMode === 'auto' ? autoSpacingWidth : Math.max(0.1, customSpacingY);
+  const wallSpacingLength = spacingMode === 'auto' ? autoWallSpacingLength : Math.max(0.05, customWallSpacingX);
+  const wallSpacingWidth = spacingMode === 'auto' ? autoWallSpacingWidth : Math.max(0.05, customWallSpacingY);
 
   // Dimming scaling factor
   const dimFactor = dimmingPercent / 100;
-  const currentEffectiveLux = Math.round(calculatedLux * dimFactor);
-  const currentEffectiveLumens = Math.round(totalFixtures * fixtureLumens * dimFactor);
-  const currentEffectiveWatts = (totalFixtures * fixtureWatts * dimFactor).toFixed(1);
 
   // Beam angle parsing (extract number from 10° to 130°)
   const numericBeamAngle = useMemo(() => {
@@ -111,6 +137,116 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
     const match = beamAngleText.match(/(\d+)/);
     return match ? Math.min(130, Math.max(8, parseInt(match[1], 10))) : 90;
   }, [beamAngleText, selectedBeamAngle]);
+
+  // Generate All Fixture Slots (Both Active and Deleted)
+  const allFixtures = useMemo(() => {
+    const list: Array<{
+      id: string;
+      index: number;
+      rowIdx: number;
+      colIdx: number;
+      x: number; // m
+      y: number; // m
+      z: number; // m (ceiling height)
+      label: string;
+      isDeleted: boolean;
+      isOutOfBounds: boolean;
+    }> = [];
+
+    for (let r = 0; r < fixtureRows; r++) {
+      for (let c = 0; c < fixtureCols; c++) {
+        const id = `f-${r}-${c}`;
+        const index = r * fixtureCols + c + 1;
+        
+        let x = 0;
+        let y = 0;
+
+        if (spacingMode === 'auto') {
+          x = (r + 0.5) * autoSpacingLength;
+          y = (c + 0.5) * autoSpacingWidth;
+        } else {
+          x = wallSpacingLength + r * spacingLength;
+          y = wallSpacingWidth + c * spacingWidth;
+        }
+
+        const isDeleted = deletedFixtureIds.includes(id);
+        const isOutOfBounds = x < 0.05 || x > roomLength - 0.05 || y < 0.05 || y > roomWidth - 0.05;
+
+        list.push({
+          id,
+          index,
+          rowIdx: r,
+          colIdx: c,
+          x: Number(x.toFixed(2)),
+          y: Number(y.toFixed(2)),
+          z: roomHeight,
+          label: `โคม #${index} (แถวยาว ${r + 1}, แถวกว้าง ${c + 1})`,
+          isDeleted,
+          isOutOfBounds
+        });
+      }
+    }
+    return list;
+  }, [
+    fixtureRows, 
+    fixtureCols, 
+    spacingMode, 
+    autoSpacingLength, 
+    autoSpacingWidth, 
+    spacingLength, 
+    spacingWidth, 
+    wallSpacingLength, 
+    wallSpacingWidth, 
+    roomLength, 
+    roomWidth, 
+    roomHeight, 
+    deletedFixtureIds
+  ]);
+
+  // Active luminaires emitting light (excluding deleted or out-of-bounds fixtures)
+  const fixtures3D = useMemo(() => {
+    return allFixtures.filter(f => !f.isDeleted && !f.isOutOfBounds);
+  }, [allFixtures]);
+
+  const totalGridFixtures = allFixtures.length;
+  const activeFixturesCount = fixtures3D.length;
+  const deletedCount = deletedFixtureIds.length;
+
+  // Scaled Real-Time Photometric Power & Lumens based on active fixtures & dimming
+  const scaledCalculatedLux = totalGridFixtures > 0 ? Math.round(calculatedLux * (activeFixturesCount / totalGridFixtures)) : 0;
+  const currentEffectiveLux = Math.round(scaledCalculatedLux * dimFactor);
+  const currentEffectiveLumens = Math.round(activeFixturesCount * fixtureLumens * dimFactor);
+  const currentEffectiveWatts = (activeFixturesCount * fixtureWatts * dimFactor).toFixed(1);
+
+  // Toggle individual fixture active/deleted state
+  const toggleFixtureDeleted = (id: string) => {
+    setDeletedFixtureIds(prev => 
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
+  // Restore all fixtures
+  const restoreAllFixtures = () => {
+    setDeletedFixtureIds([]);
+  };
+
+  // Auto-center custom spacing in the room
+  const autoCenterCustomSpacing = () => {
+    if (fixtureRows <= 1) {
+      setCustomWallSpacingX(Number((roomLength / 2).toFixed(2)));
+    } else {
+      const spanX = (fixtureRows - 1) * customSpacingX;
+      const wallX = Math.max(0.1, (roomLength - spanX) / 2);
+      setCustomWallSpacingX(Number(wallX.toFixed(2)));
+    }
+    if (fixtureCols <= 1) {
+      setCustomWallSpacingY(Number((roomWidth / 2).toFixed(2)));
+    } else {
+      const spanY = (fixtureCols - 1) * customSpacingY;
+      const wallY = Math.max(0.1, (roomWidth - spanY) / 2);
+      setCustomWallSpacingY(Number(wallY.toFixed(2)));
+    }
+  };
 
   // Zoom handlers
   const handleZoomIn = () => {
@@ -186,36 +322,6 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
 
     return { px, py, scale };
   };
-
-  // List of all luminaires in room with 3D positions
-  const fixtures3D = useMemo(() => {
-    const list: Array<{
-      id: string;
-      rowIdx: number;
-      colIdx: number;
-      x: number; // m
-      y: number; // m
-      z: number; // m (ceiling height)
-      label: string;
-    }> = [];
-
-    for (let r = 0; r < fixtureRows; r++) {
-      for (let c = 0; c < fixtureCols; c++) {
-        const x = (r + 0.5) * spacingLength;
-        const y = (c + 0.5) * spacingWidth;
-        list.push({
-          id: `f-${r}-${c}`,
-          rowIdx: r,
-          colIdx: c,
-          x,
-          y,
-          z: roomHeight,
-          label: `โคม #${r * fixtureCols + c + 1} (R${r + 1},C${c + 1})`
-        });
-      }
-    }
-    return list;
-  }, [fixtureRows, fixtureCols, spacingLength, spacingWidth, roomHeight]);
 
   // 🧮 Accurate Photometric Point-by-Point Lux Calculator Engine
   const calculatePointLux = (x: number, y: number, z: number = workplaneHeight): number => {
@@ -651,15 +757,15 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
       return points.some((p) => Math.abs(p.x - x) < 0.12 && Math.abs(p.y - y) < 0.12);
     };
 
-    // 1. ⚡ Direct Under Luminaire Points (Nadir Lux - Peak intensity under each fixture)
-    fixtures3D.forEach((f, idx) => {
+    // 1. ⚡ Direct Under Active Luminaire Points (Nadir Lux - Peak intensity under each fixture)
+    fixtures3D.forEach((f) => {
       points.push({
-        id: `under-${idx}`,
+        id: `under-${f.id}`,
         x: f.x,
         y: f.y,
         z: workplaneHeight,
-        label: `ใต้โคม #${idx + 1}`,
-        subLabel: `Nadir (R${f.rowIdx + 1}, C${f.colIdx + 1})`,
+        label: `ใต้โคม #${f.index}`,
+        subLabel: `Nadir (${f.x.toFixed(2)}m, ${f.y.toFixed(2)}m)`,
         lux: calculatePointLux(f.x, f.y, workplaneHeight),
         type: 'under_fixture',
         icon: '⚡'
@@ -670,20 +776,24 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
     if (fixtureRows > 1) {
       for (let r = 0; r < fixtureRows - 1; r++) {
         for (let c = 0; c < fixtureCols; c++) {
-          const mx = (r + 1.0) * spacingLength;
-          const my = (c + 0.5) * spacingWidth;
-          if (!isDuplicate(mx, my)) {
-            points.push({
-              id: `mid-x-${r}-${c}`,
-              x: mx,
-              y: my,
-              z: workplaneHeight,
-              label: `ระหว่างโคมแนวยาว`,
-              subLabel: `#${r * fixtureCols + c + 1} ↔ #${(r + 1) * fixtureCols + c + 1}`,
-              lux: calculatePointLux(mx, my, workplaneHeight),
-              type: 'mid_row_x',
-              icon: '↔'
-            });
+          const f1 = allFixtures.find(f => f.rowIdx === r && f.colIdx === c);
+          const f2 = allFixtures.find(f => f.rowIdx === r + 1 && f.colIdx === c);
+          if (f1 && f2 && (!f1.isOutOfBounds || !f2.isOutOfBounds)) {
+            const mx = Number(((f1.x + f2.x) / 2).toFixed(2));
+            const my = Number(((f1.y + f2.y) / 2).toFixed(2));
+            if (!isDuplicate(mx, my)) {
+              points.push({
+                id: `mid-x-${r}-${c}`,
+                x: mx,
+                y: my,
+                z: workplaneHeight,
+                label: `ระหว่างโคมแนวยาว`,
+                subLabel: `#${f1.index} ↔ #${f2.index}`,
+                lux: calculatePointLux(mx, my, workplaneHeight),
+                type: 'mid_row_x',
+                icon: '↔'
+              });
+            }
           }
         }
       }
@@ -693,20 +803,24 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
     if (fixtureCols > 1) {
       for (let r = 0; r < fixtureRows; r++) {
         for (let c = 0; c < fixtureCols - 1; c++) {
-          const mx = (r + 0.5) * spacingLength;
-          const my = (c + 1.0) * spacingWidth;
-          if (!isDuplicate(mx, my)) {
-            points.push({
-              id: `mid-y-${r}-${c}`,
-              x: mx,
-              y: my,
-              z: workplaneHeight,
-              label: `ระหว่างโคมแนวกว้าง`,
-              subLabel: `#${r * fixtureCols + c + 1} ↕ #${r * fixtureCols + c + 2}`,
-              lux: calculatePointLux(mx, my, workplaneHeight),
-              type: 'mid_col_y',
-              icon: '↕'
-            });
+          const f1 = allFixtures.find(f => f.rowIdx === r && f.colIdx === c);
+          const f2 = allFixtures.find(f => f.rowIdx === r && f.colIdx === c + 1);
+          if (f1 && f2 && (!f1.isOutOfBounds || !f2.isOutOfBounds)) {
+            const mx = Number(((f1.x + f2.x) / 2).toFixed(2));
+            const my = Number(((f1.y + f2.y) / 2).toFixed(2));
+            if (!isDuplicate(mx, my)) {
+              points.push({
+                id: `mid-y-${r}-${c}`,
+                x: mx,
+                y: my,
+                z: workplaneHeight,
+                label: `ระหว่างโคมแนวกว้าง`,
+                subLabel: `#${f1.index} ↕ #${f2.index}`,
+                lux: calculatePointLux(mx, my, workplaneHeight),
+                type: 'mid_col_y',
+                icon: '↕'
+              });
+            }
           }
         }
       }
@@ -716,20 +830,24 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
     if (fixtureRows > 1 && fixtureCols > 1) {
       for (let r = 0; r < fixtureRows - 1; r++) {
         for (let c = 0; c < fixtureCols - 1; c++) {
-          const mx = (r + 1.0) * spacingLength;
-          const my = (c + 1.0) * spacingWidth;
-          if (!isDuplicate(mx, my)) {
-            points.push({
-              id: `quad-${r}-${c}`,
-              x: mx,
-              y: my,
-              z: workplaneHeight,
-              label: `กึ่งกลาง 4 โคม`,
-              subLabel: `Quad Center (R${r + 1}-${r + 2}, C${c + 1}-${c + 2})`,
-              lux: calculatePointLux(mx, my, workplaneHeight),
-              type: 'quad_center',
-              icon: '✛'
-            });
+          const f1 = allFixtures.find(f => f.rowIdx === r && f.colIdx === c);
+          const f2 = allFixtures.find(f => f.rowIdx === r + 1 && f.colIdx === c + 1);
+          if (f1 && f2) {
+            const mx = Number(((f1.x + f2.x) / 2).toFixed(2));
+            const my = Number(((f1.y + f2.y) / 2).toFixed(2));
+            if (!isDuplicate(mx, my) && mx > 0 && mx < roomLength && my > 0 && my < roomWidth) {
+              points.push({
+                id: `quad-${r}-${c}`,
+                x: mx,
+                y: my,
+                z: workplaneHeight,
+                label: `กึ่งกลาง 4 โคม`,
+                subLabel: `Quad Center (R${r + 1}-${r + 2}, C${c + 1}-${c + 2})`,
+                lux: calculatePointLux(mx, my, workplaneHeight),
+                type: 'quad_center',
+                icon: '✛'
+              });
+            }
           }
         }
       }
@@ -739,11 +857,12 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
     if (luxDensityMode === 'surrounding') {
       // Left & Right Wall Perimeters
       for (let c = 0; c < fixtureCols; c++) {
-        const leftX = wallSpacingLength * 0.5;
-        const rightX = roomLength - wallSpacingLength * 0.5;
-        const my = (c + 0.5) * spacingWidth;
+        const leftX = Number((wallSpacingLength * 0.5).toFixed(2));
+        const rightX = Number((roomLength - wallSpacingLength * 0.5).toFixed(2));
+        const refF = allFixtures.find(f => f.colIdx === c);
+        const my = refF ? refF.y : (c + 0.5) * spacingWidth;
 
-        if (!isDuplicate(leftX, my)) {
+        if (!isDuplicate(leftX, my) && leftX > 0 && leftX < roomLength) {
           points.push({
             id: `perim-left-${c}`,
             x: leftX,
@@ -757,7 +876,7 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
           });
         }
 
-        if (!isDuplicate(rightX, my)) {
+        if (!isDuplicate(rightX, my) && rightX > 0 && rightX < roomLength) {
           points.push({
             id: `perim-right-${c}`,
             x: rightX,
@@ -774,11 +893,12 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
 
       // Top & Bottom Wall Perimeters
       for (let r = 0; r < fixtureRows; r++) {
-        const topY = wallSpacingWidth * 0.5;
-        const botY = roomWidth - wallSpacingWidth * 0.5;
-        const mx = (r + 0.5) * spacingLength;
+        const topY = Number((wallSpacingWidth * 0.5).toFixed(2));
+        const botY = Number((roomWidth - wallSpacingWidth * 0.5).toFixed(2));
+        const refF = allFixtures.find(f => f.rowIdx === r);
+        const mx = refF ? refF.x : (r + 0.5) * spacingLength;
 
-        if (!isDuplicate(mx, topY)) {
+        if (!isDuplicate(mx, topY) && topY > 0 && topY < roomWidth) {
           points.push({
             id: `perim-top-${r}`,
             x: mx,
@@ -792,7 +912,7 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
           });
         }
 
-        if (!isDuplicate(mx, botY)) {
+        if (!isDuplicate(mx, botY) && botY > 0 && botY < roomWidth) {
           points.push({
             id: `perim-bot-${r}`,
             x: mx,
@@ -874,6 +994,7 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
     return points;
   }, [
     fixtures3D,
+    allFixtures,
     fixtureRows,
     fixtureCols,
     spacingLength,
@@ -1338,6 +1459,324 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
         </div>
       )}
 
+      {/* 📐 Fixture Spacing Mode (Auto vs Custom) & Individual Fixture Manager Ribbon */}
+      <div className="px-3 py-2 bg-slate-950 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2.5 text-xs">
+        
+        {/* Left: Spacing Mode (Auto vs Custom) */}
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-amber-400 font-bold flex items-center gap-1 text-[11px]">
+            <Ruler className="w-3.5 h-3.5 text-amber-400" />
+            <span>ระยะติดตั้งโคมไฟ:</span>
+          </span>
+
+          <div className="flex items-center gap-1 bg-slate-900 p-0.5 rounded-lg border border-slate-800">
+            <button
+              type="button"
+              onClick={() => {
+                setSpacingMode('auto');
+                setShowSpacingDrawer(false);
+              }}
+              className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition flex items-center gap-1 cursor-pointer ${
+                spacingMode === 'auto'
+                  ? 'bg-amber-500 text-slate-950 shadow-xs'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Sparkles className="w-3 h-3" />
+              <span>Auto ({autoSpacingLength.toFixed(2)}m × {autoSpacingWidth.toFixed(2)}m)</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setSpacingMode('custom');
+                setShowSpacingDrawer(true);
+              }}
+              className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition flex items-center gap-1 cursor-pointer ${
+                spacingMode === 'custom'
+                  ? 'bg-amber-500 text-slate-950 shadow-xs'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <SlidersHorizontal className="w-3 h-3" />
+              <span>กำหนดระยะเอง ({spacingLength.toFixed(2)}m × {spacingWidth.toFixed(2)}m)</span>
+            </button>
+          </div>
+
+          {spacingMode === 'custom' && (
+            <button
+              type="button"
+              onClick={() => setShowSpacingDrawer(!showSpacingDrawer)}
+              className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-300 text-[10px] font-bold border border-slate-700 flex items-center gap-1 cursor-pointer"
+            >
+              <Settings className="w-3 h-3" />
+              <span>{showSpacingDrawer ? 'ซ่อนตั้งค่าระยะ' : 'ปรับระยะห่าง'}</span>
+            </button>
+          )}
+        </div>
+
+        {/* Right: Fixture Active Matrix & Deletion Summary */}
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setShowFixtureDrawer(!showFixtureDrawer)}
+            className={`px-2.5 py-1 rounded-lg border text-[11px] font-bold transition flex items-center gap-1.5 cursor-pointer ${
+              deletedCount > 0
+                ? 'bg-rose-500/20 text-rose-300 border-rose-500/50 shadow-xs'
+                : 'bg-slate-900 text-slate-200 border-slate-700 hover:border-slate-600'
+            }`}
+            title="เปิดแผงจัดการโคมไฟ / ตรวจสอบโคมที่ถูกลบออก"
+          >
+            <Grid className="w-3.5 h-3.5 text-amber-400" />
+            <span>โคมในแบบ:</span>
+            <span className="font-mono text-amber-400">{activeFixturesCount}/{totalGridFixtures}</span>
+            {deletedCount > 0 && (
+              <span className="px-1.5 py-0.2 rounded bg-rose-950 text-rose-300 border border-rose-800 text-[10px]">
+                ลบออก {deletedCount}
+              </span>
+            )}
+          </button>
+
+          {deletedCount > 0 && (
+            <button
+              type="button"
+              onClick={restoreAllFixtures}
+              className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-[10px] font-bold transition flex items-center gap-1 cursor-pointer"
+              title="คืนค่าโคมไฟทั้งหมดให้กลับมาครบทุกจุด"
+            >
+              <RotateCcw className="w-3 h-3 text-amber-400" />
+              <span>กู้คืนทั้งหมด</span>
+            </button>
+          )}
+        </div>
+
+      </div>
+
+      {/* 🛠️ Custom Spacing Configuration Drawer (Expandable) */}
+      {spacingMode === 'custom' && showSpacingDrawer && (
+        <div className="p-3.5 bg-slate-900/95 border-b border-amber-500/30 text-xs animate-in slide-in-from-top duration-150">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+            <div className="flex items-center gap-1.5 text-amber-400 font-bold text-xs">
+              <SlidersHorizontal className="w-4 h-4" />
+              <span>กำหนดระยะห่างระหว่างโคมไฟ และระยะห่างผนัง (Custom Fixture Spacing)</span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={autoCenterCustomSpacing}
+                className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 text-[11px] font-bold transition flex items-center gap-1 cursor-pointer"
+                title="คำนวณระยะห่างผนังให้อยู่กึ่งกลางห้องอัตโนมัติ"
+              >
+                <Sparkles className="w-3 h-3" />
+                <span>จัดวางกึ่งกลางห้อง (Auto-Center)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowSpacingDrawer(false)}
+                className="p-1 text-slate-400 hover:text-white"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            
+            {/* 1. Spacing along Length (X) */}
+            <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-800">
+              <div className="flex justify-between items-center mb-1.5">
+                <span className="text-slate-300 font-medium text-[11px]">ระยะห่างแนวยาว (Sx):</span>
+                <span className="font-mono text-amber-400 font-bold text-xs">{customSpacingX.toFixed(2)} m</span>
+              </div>
+              <input
+                type="range"
+                min="0.5"
+                max={Math.max(3.5, roomLength).toFixed(1)}
+                step="0.05"
+                value={customSpacingX}
+                onChange={(e) => setCustomSpacingX(parseFloat(e.target.value))}
+                className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-500 mb-2"
+              />
+              <div className="flex flex-wrap items-center gap-1">
+                {[1.2, 1.5, 1.8, 2.0, 2.4, 3.0].map((preset) => (
+                  <button
+                    key={`preset-sx-${preset}`}
+                    type="button"
+                    onClick={() => setCustomSpacingX(preset)}
+                    className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold transition ${
+                      Math.abs(customSpacingX - preset) < 0.05
+                        ? 'bg-amber-400 text-slate-950'
+                        : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                    }`}
+                  >
+                    {preset}m
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* 2. Spacing along Width (Y) */}
+            <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-800">
+              <div className="flex justify-between items-center mb-1.5">
+                <span className="text-slate-300 font-medium text-[11px]">ระยะห่างแนวกว้าง (Sy):</span>
+                <span className="font-mono text-amber-400 font-bold text-xs">{customSpacingY.toFixed(2)} m</span>
+              </div>
+              <input
+                type="range"
+                min="0.5"
+                max={Math.max(3.5, roomWidth).toFixed(1)}
+                step="0.05"
+                value={customSpacingY}
+                onChange={(e) => setCustomSpacingY(parseFloat(e.target.value))}
+                className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-500 mb-2"
+              />
+              <div className="flex flex-wrap items-center gap-1">
+                {[1.2, 1.5, 1.8, 2.0, 2.4, 3.0].map((preset) => (
+                  <button
+                    key={`preset-sy-${preset}`}
+                    type="button"
+                    onClick={() => setCustomSpacingY(preset)}
+                    className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold transition ${
+                      Math.abs(customSpacingY - preset) < 0.05
+                        ? 'bg-amber-400 text-slate-950'
+                        : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                    }`}
+                  >
+                    {preset}m
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* 3. Wall Offset Length (Wx) */}
+            <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-800">
+              <div className="flex justify-between items-center mb-1.5">
+                <span className="text-slate-300 font-medium text-[11px]">ระยะห่างผนังแนวยาว (Wx):</span>
+                <span className="font-mono text-sky-400 font-bold text-xs">{customWallSpacingX.toFixed(2)} m</span>
+              </div>
+              <input
+                type="range"
+                min="0.1"
+                max={Math.max(2.0, roomLength / 2).toFixed(1)}
+                step="0.05"
+                value={customWallSpacingX}
+                onChange={(e) => setCustomWallSpacingX(parseFloat(e.target.value))}
+                className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-sky-500 mb-2"
+              />
+              <div className="text-[10px] text-slate-400">
+                ระยะจากขอบผนังซ้ายถึงโคมแถวแรก
+              </div>
+            </div>
+
+            {/* 4. Wall Offset Width (Wy) */}
+            <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-800">
+              <div className="flex justify-between items-center mb-1.5">
+                <span className="text-slate-300 font-medium text-[11px]">ระยะห่างผนังแนวกว้าง (Wy):</span>
+                <span className="font-mono text-sky-400 font-bold text-xs">{customWallSpacingY.toFixed(2)} m</span>
+              </div>
+              <input
+                type="range"
+                min="0.1"
+                max={Math.max(2.0, roomWidth / 2).toFixed(1)}
+                step="0.05"
+                value={customWallSpacingY}
+                onChange={(e) => setCustomWallSpacingY(parseFloat(e.target.value))}
+                className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-sky-500 mb-2"
+              />
+              <div className="text-[10px] text-slate-400">
+                ระยะจากขอบผนังบนถึงโคมแถวแรก
+              </div>
+            </div>
+
+          </div>
+
+          {/* Validation Warning if fixtures exceed room boundary */}
+          {allFixtures.some(f => f.isOutOfBounds) && (
+            <div className="mt-2.5 p-2 bg-amber-950/80 border border-amber-600/60 rounded-xl flex items-center gap-2 text-amber-200 text-[11px]">
+              <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+              <span>
+                คำเตือน: มีโคมไฟบางจุดอยู่นอกขอบเขตห้อง {roomLength}m × {roomWidth}m (สามารถกดปุ่ม "จัดวางกึ่งกลางห้อง" หรือปรับลดระยะห่างได้)
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 💡 Individual Fixtures Matrix & Deletion Drawer (Expandable) */}
+      {showFixtureDrawer && (
+        <div className="p-3.5 bg-slate-900/95 border-b border-slate-800 text-xs animate-in slide-in-from-top duration-150">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+            <div className="flex items-center gap-1.5 text-slate-200 font-bold text-xs">
+              <Grid className="w-4 h-4 text-amber-400" />
+              <span>ผังรายการโคมไฟทั้งหมด ({totalGridFixtures} จุด) - คลิกที่ปุ่มเพื่อลบหรือกู้คืนโคมเฉพาะจุด</span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {deletedCount > 0 && (
+                <button
+                  type="button"
+                  onClick={restoreAllFixtures}
+                  className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold transition flex items-center gap-1 cursor-pointer"
+                >
+                  <CheckCircle2 className="w-3 h-3" />
+                  <span>กู้คืนโคมไฟทั้งหมด ({totalGridFixtures} จุด)</span>
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setShowFixtureDrawer(false)}
+                className="p-1 text-slate-400 hover:text-white"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2">
+            {allFixtures.map((f) => {
+              const isDel = f.isDeleted;
+              const isOOB = f.isOutOfBounds;
+              return (
+                <button
+                  key={`matrix-f-${f.id}`}
+                  type="button"
+                  onClick={() => toggleFixtureDeleted(f.id)}
+                  className={`p-2 rounded-xl border text-left transition flex flex-col justify-between cursor-pointer ${
+                    isDel
+                      ? 'bg-rose-950/40 border-rose-900/60 text-rose-300 hover:border-rose-600'
+                      : isOOB
+                      ? 'bg-amber-950/40 border-amber-900/60 text-amber-300 hover:border-amber-600'
+                      : 'bg-slate-950 border-slate-800 text-slate-200 hover:border-amber-500/60'
+                  }`}
+                  title={isDel ? `คลิกเพื่อกู้คืนโคม #${f.index}` : `คลิกเพื่อลบโคม #${f.index} ออกจากแบบ`}
+                >
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="font-mono font-bold text-xs">#{f.index}</span>
+                    {isDel ? (
+                      <span className="text-[10px] text-rose-400 font-bold">✕ ลบ</span>
+                    ) : isOOB ? (
+                      <span className="text-[10px] text-amber-400 font-bold">⚠️ นอกห้อง</span>
+                    ) : (
+                      <span className="text-[10px] text-emerald-400 font-bold">🟢 เปิด</span>
+                    )}
+                  </div>
+                  <div className="text-[10px] text-slate-400 font-mono">
+                    ({f.x}m, {f.y}m)
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="mt-2.5 text-[11px] text-slate-400 flex items-center gap-1.5">
+            <Info className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+            <span>เคล็ดลับ: ท่านสามารถคลิกที่ตัวโคมไฟบนภาพ 2D หรือ 3D เพื่อดูรายละเอียดและเลือกลบโคมได้เช่นเดียวกัน</span>
+          </div>
+        </div>
+      )}
+
       {/* Main Interactive Stage Area */}
       <div 
         className={`relative w-full select-none overflow-hidden transition-all duration-150 ${isFullscreen ? 'flex-1 min-h-[500px]' : 'h-96'}`}
@@ -1352,6 +1791,97 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
 
         {/* 🎛️ Floating In-Canvas Brightness Slider (Visible during 2D, 3D & Fullscreen Zooming) */}
         {renderInCanvasDimmingSlider()}
+
+        {/* 💡 Floating Inspector Modal for Clicked Fixture */}
+        {(() => {
+          const inspectedFixture = allFixtures.find(f => f.id === inspectedFixtureId);
+          if (!inspectedFixture) return null;
+
+          return (
+            <div className="absolute top-4 left-4 z-30 bg-slate-900/95 backdrop-blur border border-amber-500/50 shadow-2xl rounded-2xl p-3.5 max-w-xs text-xs animate-in fade-in zoom-in-95 duration-150">
+              <div className="flex items-center justify-between gap-2 border-b border-slate-800 pb-2 mb-2.5">
+                <div className="flex items-center gap-1.5 font-bold text-amber-400">
+                  <Sun className="w-4 h-4 text-amber-400" />
+                  <span>โคมไฟ #{inspectedFixture.index}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setInspectedFixtureId(null)}
+                  className="p-1 rounded-md text-slate-400 hover:text-white hover:bg-slate-800 transition"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              <div className="space-y-2 text-[11px] mb-3">
+                <div className="flex justify-between items-center bg-slate-950/80 px-2.5 py-1.5 rounded-lg border border-slate-800">
+                  <span className="text-slate-400">สถานะ:</span>
+                  {inspectedFixture.isDeleted ? (
+                    <span className="px-2 py-0.5 rounded bg-rose-950 text-rose-300 border border-rose-800 font-bold flex items-center gap-1">
+                      <EyeOff className="w-3 h-3" /> ลบออกจากแบบ
+                    </span>
+                  ) : inspectedFixture.isOutOfBounds ? (
+                    <span className="px-2 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-800 font-bold flex items-center gap-1">
+                      <AlertCircle className="w-3 h-3" /> อยู่นอกห้อง
+                    </span>
+                  ) : (
+                    <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800 font-bold flex items-center gap-1">
+                      <Eye className="w-3 h-3" /> เปิดใช้งานปกติ
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex justify-between items-center px-1">
+                  <span className="text-slate-400">พิกัดในห้อง (X, Y):</span>
+                  <span className="font-mono text-slate-200 font-bold">
+                    ({inspectedFixture.x.toFixed(2)}m, {inspectedFixture.y.toFixed(2)}m)
+                  </span>
+                </div>
+
+                <div className="flex justify-between items-center px-1">
+                  <span className="text-slate-400">ระดับความสูง (Z):</span>
+                  <span className="font-mono text-slate-200 font-bold">{roomHeight.toFixed(2)}m (เพดาน)</span>
+                </div>
+
+                {!inspectedFixture.isDeleted && !inspectedFixture.isOutOfBounds && (
+                  <div className="flex justify-between items-center px-1">
+                    <span className="text-slate-400">ความสว่างใต้โคม (Nadir):</span>
+                    <span className="font-mono text-amber-300 font-bold">
+                      {calculatePointLux(inspectedFixture.x, inspectedFixture.y, workplaneHeight)} Lux
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Action Buttons: Delete / Restore */}
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    toggleFixtureDeleted(inspectedFixture.id);
+                  }}
+                  className={`flex-1 py-1.5 rounded-xl font-bold transition flex items-center justify-center gap-1.5 cursor-pointer text-xs ${
+                    inspectedFixture.isDeleted
+                      ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-600/30'
+                      : 'bg-rose-600 hover:bg-rose-500 text-white shadow-md shadow-rose-600/30'
+                  }`}
+                >
+                  {inspectedFixture.isDeleted ? (
+                    <>
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>นำโคมนี้กลับมาใช้งาน</span>
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>ลบโคมนี้ออกจากแบบ</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* 1. 3D ISOMETRIC / PERSPECTIVE ROOM SIMULATION WITH REAL-TIME LUX POINTS */}
         {viewMode === '3d' && (
