@@ -2508,15 +2508,17 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
                     <g id="2d-inter-fixture-grid-lines" opacity="0.6">
                       {/* Horizontal connecting lines along rows */}
                       {Array.from({ length: fixtureRows }).map((_, r) => {
-                        const y = originY + (r + 0.5) * (spacingWidth * scale);
-                        const startX = originX + 0.5 * (spacingLength * scale);
-                        const endX = originX + (fixtureRows - 0.5) * (spacingLength * scale);
+                        const rowFixtures = allFixtures.filter(f => f.rowIdx === r);
+                        if (rowFixtures.length === 0) return null;
+                        const minX = Math.min(...rowFixtures.map(f => f.x));
+                        const maxX = Math.max(...rowFixtures.map(f => f.x));
+                        const y = originY + rowFixtures[0].y * scale;
                         return (
                           <line
                             key={`grid-line-h-${r}`}
-                            x1={startX}
+                            x1={originX + minX * scale}
                             y1={y}
-                            x2={endX}
+                            x2={originX + maxX * scale}
                             y2={y}
                             stroke="#38bdf8"
                             strokeWidth="1"
@@ -2527,16 +2529,18 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
 
                       {/* Vertical connecting lines along columns */}
                       {Array.from({ length: fixtureCols }).map((_, c) => {
-                        const x = originX + (c + 0.5) * (spacingLength * scale);
-                        const startY = originY + 0.5 * (spacingWidth * scale);
-                        const endY = originY + (fixtureCols - 0.5) * (spacingWidth * scale);
+                        const colFixtures = allFixtures.filter(f => f.colIdx === c);
+                        if (colFixtures.length === 0) return null;
+                        const minY = Math.min(...colFixtures.map(f => f.y));
+                        const maxY = Math.max(...colFixtures.map(f => f.y));
+                        const x = originX + colFixtures[0].x * scale;
                         return (
                           <line
                             key={`grid-line-v-${c}`}
                             x1={x}
-                            y1={startY}
+                            y1={originY + minY * scale}
                             x2={x}
-                            y2={endY}
+                            y2={originY + maxY * scale}
                             stroke="#38bdf8"
                             strokeWidth="1"
                             strokeDasharray="3,3"
@@ -2546,59 +2550,138 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
                     </g>
                   )}
 
-                  {/* Ceiling Fixture Circles with Optical Cones */}
-                  {Array.from({ length: fixtureRows }).flatMap((_, r) =>
-                    Array.from({ length: fixtureCols }).map((_, c) => {
-                      const cx = originX + (r + 0.5) * (spacingLength * scale);
-                      const cy = originY + (c + 0.5) * (spacingWidth * scale);
-                      const spreadRadiusM = Math.tan(((numericBeamAngle / 2) * Math.PI) / 180) * Math.max(0.5, roomHeight - workplaneHeight);
-                      const radiusPx = Math.max(10, spreadRadiusM * scale);
+                  {/* Ceiling Fixture Circles with Optical Cones & Interactive Management */}
+                  {allFixtures.map((f) => {
+                    const cx = originX + f.x * scale;
+                    const cy = originY + f.y * scale;
+                    const isSelected = inspectedFixtureId === f.id;
+                    const spreadRadiusM = Math.tan(((numericBeamAngle / 2) * Math.PI) / 180) * Math.max(0.5, roomHeight - workplaneHeight);
+                    const radiusPx = Math.max(10, spreadRadiusM * scale);
 
+                    if (f.isDeleted) {
                       return (
-                        <g key={`2d-fixture-${r}-${c}`}>
-                          {dimmingPercent > 0 && (
-                            <circle
-                              cx={cx}
-                              cy={cy}
-                              r={radiusPx}
-                              fill={`rgba(245, 158, 11, ${0.14 * dimFactor})`}
-                              stroke={`rgba(251, 191, 36, ${0.3 * dimFactor})`}
-                              strokeWidth="0.8"
-                              strokeDasharray="2,2"
-                            />
-                          )}
-
+                        <g 
+                          key={`2d-fixture-${f.id}`}
+                          className="cursor-pointer group opacity-65 hover:opacity-100 transition"
+                          onClick={() => setInspectedFixtureId(isSelected ? null : f.id)}
+                        >
                           <circle
                             cx={cx}
                             cy={cy}
-                            r="6"
-                            fill={dimmingPercent === 0 ? '#334155' : '#f59e0b'}
-                            stroke="#ffffff"
-                            strokeWidth="1.8"
+                            r="8"
+                            fill="#1e1b4b"
+                            stroke="#f43f5e"
+                            strokeWidth="1.5"
+                            strokeDasharray="2,2"
                           />
-                          
-                          <circle
-                            cx={cx}
-                            cy={cy}
-                            r="2"
-                            fill="#0f172a"
-                          />
-
                           <text
                             x={cx}
-                            y={cy - 9}
-                            fill="#fef08a"
+                            y={cy + 3}
+                            fill="#fda4af"
+                            fontSize="9"
+                            fontWeight="bold"
+                            textAnchor="middle"
+                          >
+                            ✕
+                          </text>
+                          <text
+                            x={cx}
+                            y={cy - 10}
+                            fill="#fda4af"
                             fontSize="8"
                             fontWeight="bold"
                             fontFamily="monospace"
                             textAnchor="middle"
                           >
-                            #{r * fixtureCols + c + 1}
+                            #{f.index} (ลบ)
                           </text>
+                          <title>{`โคม #${f.index} [ถูกลบออกจากแบบ] คลิกเพื่อกู้คืนหรือดูรายละเอียด`}</title>
                         </g>
                       );
-                    })
-                  )}
+                    }
+
+                    if (f.isOutOfBounds) {
+                      return (
+                        <g 
+                          key={`2d-fixture-${f.id}`}
+                          className="cursor-pointer group"
+                          onClick={() => setInspectedFixtureId(isSelected ? null : f.id)}
+                        >
+                          <circle
+                            cx={cx}
+                            cy={cy}
+                            r="8"
+                            fill="#451a03"
+                            stroke="#f59e0b"
+                            strokeWidth="1.5"
+                            strokeDasharray="2,2"
+                          />
+                          <text
+                            x={cx}
+                            y={cy - 10}
+                            fill="#fcd34d"
+                            fontSize="8"
+                            fontWeight="bold"
+                            fontFamily="monospace"
+                            textAnchor="middle"
+                          >
+                            #{f.index} ⚠️
+                          </text>
+                          <title>{`โคม #${f.index} [อยู่นอกพื้นที่ห้อง (${f.x}m, ${f.y}m)]`}</title>
+                        </g>
+                      );
+                    }
+
+                    return (
+                      <g 
+                        key={`2d-fixture-${f.id}`}
+                        className="cursor-pointer group"
+                        onClick={() => setInspectedFixtureId(isSelected ? null : f.id)}
+                      >
+                        {dimmingPercent > 0 && (
+                          <circle
+                            cx={cx}
+                            cy={cy}
+                            r={radiusPx}
+                            fill={`rgba(245, 158, 11, ${0.14 * dimFactor})`}
+                            stroke={`rgba(251, 191, 36, ${0.3 * dimFactor})`}
+                            strokeWidth="0.8"
+                            strokeDasharray="2,2"
+                          />
+                        )}
+
+                        <circle
+                          cx={cx}
+                          cy={cy}
+                          r={isSelected ? "8" : "6"}
+                          fill={dimmingPercent === 0 ? '#334155' : isSelected ? '#fbbf24' : '#f59e0b'}
+                          stroke={isSelected ? '#38bdf8' : '#ffffff'}
+                          strokeWidth={isSelected ? '2.2' : '1.8'}
+                        />
+                        
+                        <circle
+                          cx={cx}
+                          cy={cy}
+                          r="2"
+                          fill="#0f172a"
+                        />
+
+                        <text
+                          x={cx}
+                          y={cy - 9}
+                          fill="#fef08a"
+                          fontSize="8"
+                          fontWeight="bold"
+                          fontFamily="monospace"
+                          textAnchor="middle"
+                        >
+                          #{f.index}
+                        </text>
+
+                        <title>{`โคม #${f.index} (${f.x}m, ${f.y}m) | คลิกเพื่อลบหรือดูรายละเอียด`}</title>
+                      </g>
+                    );
+                  })}
 
                   {/* 🌟 2D REAL-TIME LUX VALUE TAGS (SURROUNDING & INTER-FIXTURE) */}
                   {showPointLux && (
