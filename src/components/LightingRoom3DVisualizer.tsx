@@ -1,23 +1,25 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   Box, 
   Layers, 
   RotateCw, 
   RotateCcw, 
-  Eye, 
-  EyeOff, 
-  Maximize2, 
-  ZoomIn, 
-  ZoomOut, 
-  Compass, 
-  Sparkles, 
-  Grid, 
   Sun, 
   Armchair, 
   Ruler, 
-  Info,
-  Sliders,
-  ChevronRight
+  Compass, 
+  Sliders, 
+  Gauge, 
+  Sparkles,
+  ChevronRight,
+  Maximize2,
+  Minimize2,
+  ZoomIn,
+  ZoomOut,
+  RefreshCcw,
+  CheckCircle2,
+  AlertCircle,
+  X
 } from 'lucide-react';
 
 export interface LightingRoom3DVisualizerProps {
@@ -55,23 +57,32 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
   luminaireName = 'โคมไฟส่องสว่าง',
   luminaireIcon = '💡'
 }) => {
-  // View mode: '3d' | '2d' | 'elevation' | 'split'
-  const [viewMode, setViewMode] = useState<'3d' | '2d' | 'elevation' | 'split'>('3d');
+  // View mode: '3d' | '2d' | 'elevation'
+  const [viewMode, setViewMode] = useState<'3d' | '2d' | 'elevation'>('3d');
+
+  // 🎛️ 0-100% Dimming / Brightness Slider State
+  const [dimmingPercent, setDimmingPercent] = useState<number>(100);
+
+  // 🔍 Zoom In / Zoom Out Controls & Fullscreen Modal State
+  const [zoomLevel3D, setZoomLevel3D] = useState<number>(1.0); // 0.5x to 2.5x
+  const [zoomLevel2D, setZoomLevel2D] = useState<number>(1.0); // 0.6x to 2.5x
+  const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
 
   // 3D Orbital Camera Controls
   const [rotationAngle, setRotationAngle] = useState<number>(35); // Azimuth in degrees
   const [tiltAngle, setTiltAngle] = useState<number>(32); // Elevation/Tilt in degrees
-  const [zoomLevel, setZoomLevel] = useState<number>(1.0);
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const [dragStart, setDragStart] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
 
   // Feature Toggles
+  const [showPointLux, setShowPointLux] = useState<boolean>(true); // Show real-time Lux badges on points
   const [showLightCones, setShowLightCones] = useState<boolean>(true);
   const [showFurniture, setShowFurniture] = useState<boolean>(true);
   const [showDimensions, setShowDimensions] = useState<boolean>(true);
-  const [showLuxHeatmap, setShowLuxHeatmap] = useState<boolean>(false);
-  const [showWorkplane, setShowWorkplane] = useState<boolean>(true);
   const [selectedFixtureIdx, setSelectedFixtureIdx] = useState<number | null>(null);
+
+  // Interactive Hover Lux Sensor Probe
+  const [hoverProbePos, setHoverProbePos] = useState<{ x: number; y: number; lux: number } | null>(null);
 
   // Derived Spacing Calculations
   const spacingLength = roomLength / Math.max(1, fixtureRows);
@@ -80,15 +91,45 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
   const wallSpacingWidth = spacingWidth / 2;
   const totalFixtures = fixtureRows * fixtureCols;
 
+  // Dimming scaling factor
+  const dimFactor = dimmingPercent / 100;
+  const currentEffectiveLux = Math.round(calculatedLux * dimFactor);
+  const currentEffectiveLumens = Math.round(totalFixtures * fixtureLumens * dimFactor);
+  const currentEffectiveWatts = (totalFixtures * fixtureWatts * dimFactor).toFixed(1);
+
   // Beam angle parsing (extract number or default to 90)
   const numericBeamAngle = useMemo(() => {
     const match = beamAngleText.match(/(\d+)/);
     return match ? Math.min(130, Math.max(20, parseInt(match[1], 10))) : 90;
   }, [beamAngleText]);
 
+  // Zoom handlers
+  const handleZoomIn = () => {
+    if (viewMode === '3d') {
+      setZoomLevel3D((prev) => Math.min(2.5, Number((prev + 0.2).toFixed(1))));
+    } else {
+      setZoomLevel2D((prev) => Math.min(2.5, Number((prev + 0.2).toFixed(1))));
+    }
+  };
+
+  const handleZoomOut = () => {
+    if (viewMode === '3d') {
+      setZoomLevel3D((prev) => Math.max(0.5, Number((prev - 0.2).toFixed(1))));
+    } else {
+      setZoomLevel2D((prev) => Math.max(0.6, Number((prev - 0.2).toFixed(1))));
+    }
+  };
+
+  const handleResetZoom = () => {
+    setZoomLevel3D(1.0);
+    setZoomLevel2D(1.0);
+    setRotationAngle(35);
+    setTiltAngle(32);
+  };
+
   // Handle Drag-to-Rotate for 3D View
   const handleMouseDown = (e: React.MouseEvent) => {
-    if (viewMode !== '3d' && viewMode !== 'split') return;
+    if (viewMode !== '3d') return;
     setIsDragging(true);
     setDragStart({ x: e.clientX, y: e.clientY });
   };
@@ -108,39 +149,93 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
   };
 
   // 3D Isometric Math Projection Helper
-  // Projects (x, y, z) in Room Coordinates [0..L, 0..W, 0..H] into 2D SVG canvas (cx, cy)
   const project3D = (
     x: number,
     y: number,
     z: number,
-    canvasW: number = 600,
-    canvasH: number = 380
+    canvasW: number = 750,
+    canvasH: number = 440
   ) => {
     const cx = canvasW / 2;
     const cy = canvasH / 2 + 30;
 
-    // Center coordinates around origin (-L/2..L/2, -W/2..W/2)
     const ox = x - roomLength / 2;
     const oy = y - roomWidth / 2;
-    const oz = z; // 0 is floor, H is ceiling
+    const oz = z;
 
-    // Radians
     const radRot = (rotationAngle * Math.PI) / 180;
     const radTilt = (tiltAngle * Math.PI) / 180;
 
-    // Rotate around Z axis (Azimuth)
     const rx = ox * Math.cos(radRot) - oy * Math.sin(radRot);
     const ry = ox * Math.sin(radRot) + oy * Math.cos(radRot);
 
-    // Scale calculation based on room size to fit viewport nicely
     const maxDim = Math.max(roomLength, roomWidth, roomHeight * 1.3, 5);
-    const scale = (Math.min(canvasW, canvasH) * 0.46 * zoomLevel) / maxDim;
+    const scale = (Math.min(canvasW, canvasH) * 0.46 * zoomLevel3D) / maxDim;
 
-    // Perspective/Isometric projection
     const px = cx + rx * scale;
     const py = cy + (ry * Math.sin(radTilt) - oz * Math.cos(radTilt)) * scale;
 
     return { px, py, scale };
+  };
+
+  // List of all luminaires in room with 3D positions
+  const fixtures3D = useMemo(() => {
+    const list: Array<{
+      id: string;
+      rowIdx: number;
+      colIdx: number;
+      x: number; // m
+      y: number; // m
+      z: number; // m (ceiling height)
+      label: string;
+    }> = [];
+
+    for (let r = 0; r < fixtureRows; r++) {
+      for (let c = 0; c < fixtureCols; c++) {
+        const x = (r + 0.5) * spacingLength;
+        const y = (c + 0.5) * spacingWidth;
+        list.push({
+          id: `f-${r}-${c}`,
+          rowIdx: r,
+          colIdx: c,
+          x,
+          y,
+          z: roomHeight,
+          label: `โคม #${r * fixtureCols + c + 1} (R${r + 1},C${c + 1})`
+        });
+      }
+    }
+    return list;
+  }, [fixtureRows, fixtureCols, spacingLength, spacingWidth, roomHeight]);
+
+  // 🧮 Accurate Photometric Point-by-Point Lux Calculator Engine
+  const calculatePointLux = (x: number, y: number, z: number = workplaneHeight): number => {
+    if (dimmingPercent === 0) return 0;
+
+    const radBeamHalf = ((numericBeamAngle / 2) * Math.PI) / 180;
+    const n = Math.max(1, -Math.log(2) / Math.log(Math.max(0.01, Math.cos(radBeamHalf))));
+
+    let totalDirectLux = 0;
+    fixtures3D.forEach((f) => {
+      const dx = x - f.x;
+      const dy = y - f.y;
+      const dz = f.z - z;
+      const dist3D = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      if (dist3D < 0.05) return;
+
+      const cosTheta = Math.max(0, dz / dist3D);
+      const I0 = (fixtureLumens / (2 * Math.PI * (1 - Math.cos(radBeamHalf)))) * 1.15;
+      const intensityAtAngle = I0 * Math.pow(cosTheta, n);
+      const luxFromFixture = (intensityAtAngle * cosTheta) / (dist3D * dist3D);
+      totalDirectLux += luxFromFixture;
+    });
+
+    const distToWall = Math.min(x, roomLength - x, y, roomWidth - y);
+    const wallBounceFactor = Math.min(1.0, 0.65 + 0.35 * (distToWall / 1.5));
+    const roomIndirectLux = calculatedLux * 0.28 * wallBounceFactor;
+
+    const rawLux = (totalDirectLux * 0.72 + roomIndirectLux) * dimFactor;
+    return Math.max(0, Math.round(rawLux));
   };
 
   // Furniture Definitions based on Room Preset
@@ -152,9 +247,9 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
       x: number; // m
       y: number; // m
       z: number; // m
-      w: number; // m along X (Length)
-      d: number; // m along Y (Width)
-      h: number; // m along Z (Height)
+      w: number; // m along X
+      d: number; // m along Y
+      h: number; // m along Z
       color: string;
       label: string;
       icon: string;
@@ -164,12 +259,10 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
     const W = roomWidth;
 
     if (selectedRoomType.startsWith('office')) {
-      // Office: Workstation desks, chairs, storage cabinets, plant
       const deskW = Math.min(1.6, L * 0.28);
       const deskD = Math.min(0.9, W * 0.24);
       const deskH = 0.75;
 
-      // Desk 1 (Left Workstation)
       items.push({
         id: 'desk-1',
         name: 'โต๊ะทำงาน 1 (Workstation A)',
@@ -185,7 +278,6 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
         icon: '💻'
       });
 
-      // Desk 2 (Right Workstation)
       items.push({
         id: 'desk-2',
         name: 'โต๊ะทำงาน 2 (Workstation B)',
@@ -201,7 +293,6 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
         icon: '💻'
       });
 
-      // Meeting/Discussion Desk in office
       if (L >= 4 && W >= 4) {
         items.push({
           id: 'office-meeting',
@@ -219,7 +310,6 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
         });
       }
 
-      // Filing Cabinet along wall
       items.push({
         id: 'cabinet-1',
         name: 'ตู้เอกสาร (Filing Cabinet)',
@@ -235,7 +325,6 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
         icon: '🗄️'
       });
     } else if (selectedRoomType.startsWith('meeting')) {
-      // Meeting Room: Large central boardroom table, screen on front wall, credenza
       const tableW = Math.max(1.8, L * 0.55);
       const tableD = Math.max(1.1, W * 0.45);
       const tableH = 0.75;
@@ -255,7 +344,6 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
         icon: '👥'
       });
 
-      // Presentation Board / TV Screen on wall
       items.push({
         id: 'pres-screen',
         name: 'จอพรีเซนต์ 85" / Whiteboard',
@@ -271,7 +359,6 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
         icon: '📺'
       });
 
-      // Side buffet / coffee credenza
       items.push({
         id: 'side-credenza',
         name: 'ตู้เบรคกาแฟ (Coffee Credenza)',
@@ -287,12 +374,10 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
         icon: '☕'
       });
     } else if (selectedRoomType.startsWith('warehouse')) {
-      // Warehouse: Heavy Duty Storage Pallet Racks, Pallets & Forklift Zone
       const rackW = Math.min(1.2, L * 0.28);
       const rackD = Math.max(1.5, W * 0.65);
       const rackH = Math.min(roomHeight * 0.7, 4.0);
 
-      // Rack Row 1
       items.push({
         id: 'rack-1',
         name: 'ชั้นวางพาเลทอุตสาหกรรม Rack A',
@@ -308,7 +393,6 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
         icon: '📦'
       });
 
-      // Rack Row 2
       items.push({
         id: 'rack-2',
         name: 'ชั้นวางพาเลทอุตสาหกรรม Rack B',
@@ -324,7 +408,6 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
         icon: '📦'
       });
 
-      // Wooden Pallets on floor
       items.push({
         id: 'pallet-floor',
         name: 'กองสินค้าบนพาเลทไม้ (Staged Pallets)',
@@ -340,7 +423,6 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
         icon: '🪵'
       });
     } else if (selectedRoomType.startsWith('retail')) {
-      // Retail: Display Gondolas, Center Island, Cashier Checkout
       const gondolaW = Math.max(1.2, L * 0.35);
       const gondolaD = 0.8;
       const gondolaH = 1.4;
@@ -375,7 +457,6 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
         icon: '🛍️'
       });
 
-      // Cashier Counter
       items.push({
         id: 'cashier-counter',
         name: 'เคาน์เตอร์คิดเงิน (POS Cashier)',
@@ -391,7 +472,6 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
         icon: '💳'
       });
     } else if (selectedRoomType.startsWith('residential_living')) {
-      // Living Room: Sofa, Coffee Table, TV Console, Rug
       const sofaW = Math.max(1.8, L * 0.45);
       const sofaD = 0.9;
       const sofaH = 0.8;
@@ -441,7 +521,6 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
         icon: '📺'
       });
     } else if (selectedRoomType.startsWith('residential_bed')) {
-      // Bedroom: King Bed, Nightstands, Wardrobe
       const bedW = Math.max(1.8, L * 0.4);
       const bedD = Math.max(2.0, W * 0.5);
       const bedH = 0.65;
@@ -461,7 +540,6 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
         icon: '🛏️'
       });
 
-      // Wardrobe
       items.push({
         id: 'wardrobe',
         name: 'ตู้เสื้อผ้าบิวท์อิน (Wardrobe Closet)',
@@ -477,7 +555,6 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
         icon: '🚪'
       });
     } else if (selectedRoomType.startsWith('drawing')) {
-      // Drafting / Fine Craft: Large tilted drafting tables, storage
       const draftW = Math.max(1.5, L * 0.35);
       const draftD = 1.0;
       const draftH = 0.95;
@@ -512,7 +589,6 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
         icon: '📐'
       });
     } else if (selectedRoomType.startsWith('corridor')) {
-      // Corridor: Entry Door frame, runner rug, console
       items.push({
         id: 'runner-carpet',
         name: 'พรมทางเดินแนวเส้นตรง (Corridor Carpet)',
@@ -528,7 +604,6 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
         icon: '🚪'
       });
     } else {
-      // Default Multi-purpose room
       items.push({
         id: 'gen-table',
         name: 'โต๊ะทำงานและพื้นที่ใช้งานอเนกประสงค์',
@@ -548,35 +623,99 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
     return items;
   }, [selectedRoomType, roomLength, roomWidth, roomHeight]);
 
-  // List of all luminaires in room with 3D positions
-  const fixtures3D = useMemo(() => {
-    const list: Array<{
+  // 📍 Sample Key Points for Lux Display across Room Grid
+  const sampleLuxPoints = useMemo(() => {
+    const points: Array<{
       id: string;
-      rowIdx: number;
-      colIdx: number;
-      x: number; // m
-      y: number; // m
-      z: number; // m (ceiling height)
+      x: number;
+      y: number;
+      z: number;
       label: string;
+      lux: number;
+      type: 'under_fixture' | 'midpoint' | 'corner' | 'center' | 'furniture';
     }> = [];
 
-    for (let r = 0; r < fixtureRows; r++) {
-      for (let c = 0; c < fixtureCols; c++) {
-        const x = (r + 0.5) * spacingLength;
-        const y = (c + 0.5) * spacingWidth;
-        list.push({
-          id: `f-${r}-${c}`,
-          rowIdx: r,
-          colIdx: c,
-          x,
-          y,
-          z: roomHeight,
-          label: `โคม #${r * fixtureCols + c + 1} (R${r + 1},C${c + 1})`
-        });
+    // 1. Point under each Luminaire
+    fixtures3D.forEach((f, idx) => {
+      points.push({
+        id: `under-${idx}`,
+        x: f.x,
+        y: f.y,
+        z: workplaneHeight,
+        label: `ใต้โคม #${idx + 1}`,
+        lux: calculatePointLux(f.x, f.y, workplaneHeight),
+        type: 'under_fixture'
+      });
+    });
+
+    // 2. Midpoint between adjacent luminaires
+    if (fixtureRows > 1) {
+      for (let r = 0; r < fixtureRows - 1; r++) {
+        for (let c = 0; c < fixtureCols; c++) {
+          const mx = (r + 1.0) * spacingLength;
+          const my = (c + 0.5) * spacingWidth;
+          points.push({
+            id: `mid-row-${r}-${c}`,
+            x: mx,
+            y: my,
+            z: workplaneHeight,
+            label: `กึ่งกลางโคม`,
+            lux: calculatePointLux(mx, my, workplaneHeight),
+            type: 'midpoint'
+          });
+        }
       }
     }
-    return list;
-  }, [fixtureRows, fixtureCols, spacingLength, spacingWidth, roomHeight]);
+
+    // 3. Room Center Point
+    points.push({
+      id: 'center-room',
+      x: roomLength / 2,
+      y: roomWidth / 2,
+      z: workplaneHeight,
+      label: 'กึ่งกลางห้อง',
+      lux: calculatePointLux(roomLength / 2, roomWidth / 2, workplaneHeight),
+      type: 'center'
+    });
+
+    // 4. Four Corners
+    const cornerInsetX = Math.min(0.8, roomLength * 0.15);
+    const cornerInsetY = Math.min(0.8, roomWidth * 0.15);
+    [
+      { x: cornerInsetX, y: cornerInsetY, lbl: 'มุมห้อง 1' },
+      { x: roomLength - cornerInsetX, y: cornerInsetY, lbl: 'มุมห้อง 2' },
+      { x: cornerInsetX, y: roomWidth - cornerInsetY, lbl: 'มุมห้อง 3' },
+      { x: roomLength - cornerInsetX, y: roomWidth - cornerInsetY, lbl: 'มุมห้อง 4' }
+    ].forEach((c, idx) => {
+      points.push({
+        id: `corner-${idx}`,
+        x: c.x,
+        y: c.y,
+        z: workplaneHeight,
+        label: c.lbl,
+        lux: calculatePointLux(c.x, c.y, workplaneHeight),
+        type: 'corner'
+      });
+    });
+
+    // 5. Furniture surface points
+    furnitureItems.slice(0, 2).forEach((furn) => {
+      const fx = furn.x + furn.w / 2;
+      const fy = furn.y + furn.d / 2;
+      const fz = furn.z + furn.h;
+      points.push({
+        id: `furn-${furn.id}`,
+        x: fx,
+        y: fy,
+        z: fz,
+        label: `บน${furn.name.split(' ')[0]}`,
+        lux: calculatePointLux(fx, fy, fz),
+        type: 'furniture'
+      });
+    });
+
+    return points;
+  }, [fixtures3D, fixtureRows, fixtureCols, spacingLength, spacingWidth, roomLength, roomWidth, workplaneHeight, furnitureItems, dimmingPercent, calculatedLux, numericBeamAngle, fixtureLumens]);
 
   // SVG Dimension Line Component for 2D View
   const renderDimensionLine = (
@@ -590,11 +729,9 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
   ) => {
     const midX = (x1 + x2) / 2;
     const midY = (y1 + y2) / 2;
-    const arrowSize = 4;
 
     return (
       <g className="select-none font-mono text-[9px]">
-        {/* Main Dimension Line */}
         <line
           x1={x1}
           y1={y1}
@@ -602,10 +739,8 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
           y2={y2}
           stroke="#38bdf8"
           strokeWidth="1.2"
-          strokeDasharray="none"
         />
 
-        {/* Start Tick / Arrow */}
         <line
           x1={isVertical ? x1 - 3 : x1}
           y1={isVertical ? y1 : y1 - 3}
@@ -615,7 +750,6 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
           strokeWidth="1.2"
         />
 
-        {/* End Tick / Arrow */}
         <line
           x1={isVertical ? x2 - 3 : x2}
           y1={isVertical ? y2 : y2 - 3}
@@ -625,7 +759,6 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
           strokeWidth="1.2"
         />
 
-        {/* Dimension Text Background Pill */}
         <rect
           x={isVertical ? midX - 22 : midX - 20}
           y={isVertical ? midY - 6 : midY - 6}
@@ -637,7 +770,6 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
           strokeWidth="0.5"
         />
 
-        {/* Text Label */}
         <text
           x={midX}
           y={midY + 3}
@@ -651,11 +783,146 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
     );
   };
 
+  // Reusable Floating Dimming Slider Component (Rendered inside 2D, 3D & Fullscreen canvases)
+  const renderInCanvasDimmingSlider = () => (
+    <div className="absolute top-3 left-3 z-20 bg-slate-950/90 backdrop-blur-md p-2.5 rounded-xl border border-slate-700/80 shadow-2xl flex flex-col gap-1.5 w-64 md:w-72 select-none">
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] font-bold text-amber-300 flex items-center gap-1.5">
+          <Sliders className="w-3.5 h-3.5" />
+          <span>ปรับแสงสว่าง ({dimmingPercent}%)</span>
+        </span>
+        <span className="font-mono font-black text-emerald-400 text-xs">
+          {currentEffectiveLux} Lux
+        </span>
+      </div>
+
+      {/* Range Slider Track */}
+      <div className="flex items-center gap-2">
+        <input
+          type="range"
+          min={0}
+          max={100}
+          step={1}
+          value={dimmingPercent}
+          onChange={(e) => setDimmingPercent(Number(e.target.value))}
+          className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-500"
+          style={{
+            background: `linear-gradient(to right, #f59e0b 0%, #fbbf24 ${dimmingPercent}%, #334155 ${dimmingPercent}%, #334155 100%)`
+          }}
+        />
+      </div>
+
+      {/* Quick Presets */}
+      <div className="flex items-center justify-between text-[10px] pt-0.5">
+        <button
+          type="button"
+          onClick={() => setDimmingPercent(0)}
+          className={`px-1.5 py-0.5 rounded transition ${dimmingPercent === 0 ? 'bg-rose-600 text-white font-bold' : 'text-slate-400 hover:text-white'}`}
+        >
+          0% (ปิด)
+        </button>
+        <button
+          type="button"
+          onClick={() => setDimmingPercent(25)}
+          className={`px-1.5 py-0.5 rounded transition ${dimmingPercent === 25 ? 'bg-amber-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-white'}`}
+        >
+          25%
+        </button>
+        <button
+          type="button"
+          onClick={() => setDimmingPercent(50)}
+          className={`px-1.5 py-0.5 rounded transition ${dimmingPercent === 50 ? 'bg-amber-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-white'}`}
+        >
+          50%
+        </button>
+        <button
+          type="button"
+          onClick={() => setDimmingPercent(75)}
+          className={`px-1.5 py-0.5 rounded transition ${dimmingPercent === 75 ? 'bg-amber-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-white'}`}
+        >
+          75%
+        </button>
+        <button
+          type="button"
+          onClick={() => setDimmingPercent(100)}
+          className={`px-1.5 py-0.5 rounded transition ${dimmingPercent === 100 ? 'bg-emerald-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-white'}`}
+        >
+          100% (เต็ม)
+        </button>
+      </div>
+    </div>
+  );
+
   return (
-    <div className="rounded-2xl bg-slate-950 border border-slate-800 text-white overflow-hidden shadow-2xl space-y-0">
+    <div className={`rounded-2xl bg-slate-950 border border-slate-800 text-white overflow-hidden shadow-2xl transition-all duration-200 ${isFullscreen ? 'fixed inset-0 z-50 rounded-none border-none flex flex-col' : 'relative space-y-0'}`}>
       
-      {/* Visualizer Top Bar: Mode Tabs, Camera Controls & Quick Stats */}
-      <div className="p-3.5 bg-slate-900/90 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3">
+      {/* 🎛️ Top Main Dimming Ribbon (Integrated for all screens) */}
+      <div className="p-3 bg-gradient-to-r from-slate-950 via-slate-900 to-indigo-950/80 border-b border-slate-800 space-y-2.5">
+        
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-400">
+              <Sliders className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-slate-100">
+                  ปรับหรี่ความสว่างแสงสว่าง (Dimming Control):
+                </span>
+                <span className="px-2 py-0.5 rounded-full bg-amber-500 text-slate-950 font-mono font-black text-xs shadow-xs">
+                  {dimmingPercent}%
+                </span>
+                {dimmingPercent === 0 ? (
+                  <span className="text-[10px] text-rose-400 font-bold">(🔴 ปิดไฟ)</span>
+                ) : dimmingPercent === 100 ? (
+                  <span className="text-[10px] text-emerald-400 font-bold">(⚡ 100% เต็มกำลัง)</span>
+                ) : null}
+              </div>
+            </div>
+          </div>
+
+          {/* Quick Metrics */}
+          <div className="flex items-center gap-3 text-xs">
+            <div className="flex items-center gap-1.5 text-slate-300">
+              <span className="text-slate-400">ความสว่างเฉลี่ย:</span>
+              <span className="font-mono font-black text-emerald-400 text-sm">
+                {currentEffectiveLux} Lux
+              </span>
+            </div>
+            <div className="h-3 w-px bg-slate-700 hidden sm:block"></div>
+            <div className="flex items-center gap-1.5 text-slate-300">
+              <span className="text-slate-400">กำลังไฟ:</span>
+              <span className="font-mono font-bold text-white">
+                {currentEffectiveWatts} W
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Range Slider Bar */}
+        <div className="flex items-center gap-3">
+          <span className="text-[11px] font-mono text-slate-500 w-8">0%</span>
+          <div className="relative flex-1 flex items-center">
+            <input
+              type="range"
+              min={0}
+              max={100}
+              step={1}
+              value={dimmingPercent}
+              onChange={(e) => setDimmingPercent(Number(e.target.value))}
+              className="w-full h-2.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-500 focus:outline-hidden"
+              style={{
+                background: `linear-gradient(to right, #f59e0b 0%, #fbbf24 ${dimmingPercent}%, #1e293b ${dimmingPercent}%, #1e293b 100%)`
+              }}
+            />
+          </div>
+          <span className="text-[11px] font-mono text-amber-400 font-bold w-10 text-right">100%</span>
+        </div>
+
+      </div>
+
+      {/* Visualizer Toolbar: Mode Tabs, Zoom In/Out, Fullscreen & Toggles */}
+      <div className="p-3 bg-slate-900/90 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3">
         
         {/* Left: View Mode Switcher */}
         <div className="flex items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800">
@@ -669,7 +936,7 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
             }`}
           >
             <Box className="w-3.5 h-3.5" />
-            <span>3D จำลองห้องเสมือนจริง</span>
+            <span>3D จำลองห้อง & ค่า Lux</span>
           </button>
 
           <button
@@ -682,7 +949,7 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
             }`}
           >
             <Layers className="w-3.5 h-3.5" />
-            <span>2D ผังเพดาน & ระยะมิติ</span>
+            <span>2D ผังเพดาน & Lux แต่ละจุด</span>
           </button>
 
           <button
@@ -695,70 +962,114 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
             }`}
           >
             <Ruler className="w-3.5 h-3.5" />
-            <span>รูปตัดด้านข้าง (Elevation)</span>
+            <span>รูปตัด (Elevation)</span>
           </button>
         </div>
 
-        {/* Right: Quick Toggles (Cones, Furniture, Dimensions) */}
+        {/* Center: 🔍 Zoom In / Out Controls & Reset */}
+        <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs">
+          
+          <button
+            type="button"
+            onClick={handleZoomOut}
+            className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 transition cursor-pointer flex items-center gap-1"
+            title="ย่อขนาดภาพ (Zoom Out -)"
+          >
+            <ZoomOut className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline text-[10px]">ย่อ</span>
+          </button>
+
+          <span className="px-2 font-mono text-[11px] font-bold text-amber-400">
+            {Math.round((viewMode === '3d' ? zoomLevel3D : zoomLevel2D) * 100)}%
+          </span>
+
+          <button
+            type="button"
+            onClick={handleZoomIn}
+            className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 transition cursor-pointer flex items-center gap-1"
+            title="ขยายขนาดภาพ (Zoom In +)"
+          >
+            <ZoomIn className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline text-[10px]">ขยาย</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleResetZoom}
+            className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition cursor-pointer"
+            title="รีเซ็ตขนาดซูม (Reset 100%)"
+          >
+            <RefreshCcw className="w-3.5 h-3.5" />
+          </button>
+
+        </div>
+
+        {/* Right: Feature Toggles & Fullscreen Button */}
         <div className="flex flex-wrap items-center gap-1.5 text-xs">
           
           <button
             type="button"
+            onClick={() => setShowPointLux(!showPointLux)}
+            className={`px-2.5 py-1 rounded-lg border text-[11px] font-bold transition flex items-center gap-1 cursor-pointer ${
+              showPointLux
+                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-xs'
+                : 'bg-slate-800/80 text-slate-400 border-slate-700 hover:text-slate-200'
+            }`}
+            title="เปิด/ปิด การแสดงตัวเลขค่า Lux จริงในแต่ละจุดผัง"
+          >
+            <Gauge className="w-3 h-3" />
+            <span>ค่า Lux รายจุด</span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => setShowLightCones(!showLightCones)}
-            className={`px-2.5 py-1 rounded-lg border text-[11px] font-medium transition flex items-center gap-1 cursor-pointer ${
+            className={`px-2 py-1 rounded-lg border text-[11px] font-medium transition flex items-center gap-1 cursor-pointer ${
               showLightCones
                 ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
                 : 'bg-slate-800/80 text-slate-400 border-slate-700 hover:text-slate-200'
             }`}
-            title="เปิด/ปิด การแสดงกรวยลำแสง 3D จากโคมไฟ"
           >
             <Sun className="w-3 h-3" />
-            <span>กรวยลำแสง ({numericBeamAngle}°)</span>
+            <span>กรวยแสง</span>
           </button>
 
           <button
             type="button"
             onClick={() => setShowFurniture(!showFurniture)}
-            className={`px-2.5 py-1 rounded-lg border text-[11px] font-medium transition flex items-center gap-1 cursor-pointer ${
+            className={`px-2 py-1 rounded-lg border text-[11px] font-medium transition flex items-center gap-1 cursor-pointer ${
               showFurniture
                 ? 'bg-purple-500/20 text-purple-300 border-purple-500/40'
                 : 'bg-slate-800/80 text-slate-400 border-slate-700 hover:text-slate-200'
             }`}
-            title="เปิด/ปิด การแสดงเฟอร์นิเจอร์จำลองตามประเภทห้อง"
           >
             <Armchair className="w-3 h-3" />
-            <span>เฟอร์นิเจอร์ ({furnitureItems.length} ชิ้น)</span>
+            <span>เฟอร์นิเจอร์</span>
           </button>
 
+          {/* 🔲 Fullscreen / Expand Mode Toggle Button */}
           <button
             type="button"
-            onClick={() => setShowDimensions(!showDimensions)}
-            className={`px-2.5 py-1 rounded-lg border text-[11px] font-medium transition flex items-center gap-1 cursor-pointer ${
-              showDimensions
-                ? 'bg-sky-500/20 text-sky-300 border-sky-500/40'
-                : 'bg-slate-800/80 text-slate-400 border-slate-700 hover:text-slate-200'
+            onClick={() => setIsFullscreen(!isFullscreen)}
+            className={`p-1.5 rounded-lg border transition cursor-pointer flex items-center gap-1 ${
+              isFullscreen
+                ? 'bg-rose-600 text-white border-rose-500 shadow-md'
+                : 'bg-slate-800 text-amber-400 border-slate-700 hover:bg-slate-700'
             }`}
-            title="เปิด/ปิด เส้นบอกระยะห่างโคมและผนัง"
+            title={isFullscreen ? 'ย่อกลับสู่ขนาดปกติ (Exit Fullscreen)' : 'ขยายเต็มหน้าจอ (Expand Fullscreen)'}
           >
-            <Ruler className="w-3 h-3" />
-            <span>เส้นบอกระยะ (S_L, S_W)</span>
+            {isFullscreen ? (
+              <>
+                <Minimize2 className="w-3.5 h-3.5" />
+                <span className="text-[10px] font-bold">ย่อหน้าต่าง</span>
+              </>
+            ) : (
+              <>
+                <Maximize2 className="w-3.5 h-3.5" />
+                <span className="text-[10px] font-bold">ขยายเต็มจอ</span>
+              </>
+            )}
           </button>
-
-          {/* Reset Orbit Button */}
-          {viewMode === '3d' && (
-            <button
-              type="button"
-              onClick={() => {
-                setRotationAngle(35);
-                setTiltAngle(32);
-                setZoomLevel(1.0);
-              }}
-              className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition"
-              title="รีเซ็ตมุมมอง 3D กล้องหลัก"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-            </button>
-          )}
 
         </div>
 
@@ -766,38 +1077,41 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
 
       {/* Main Interactive Stage Area */}
       <div 
-        className="relative w-full h-96 bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 select-none overflow-hidden"
+        className={`relative w-full select-none overflow-hidden transition-all duration-150 ${isFullscreen ? 'flex-1 min-h-[500px]' : 'h-96'}`}
+        style={{
+          backgroundColor: dimmingPercent === 0 ? '#05070d' : `rgb(${10 + dimFactor * 12}, ${13 + dimFactor * 14}, ${24 + dimFactor * 18})`
+        }}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
       >
 
-        {/* 1. 3D ISOMETRIC / PERSPECTIVE ROOM SIMULATION */}
+        {/* 🎛️ Floating In-Canvas Brightness Slider (Visible during 2D, 3D & Fullscreen Zooming) */}
+        {renderInCanvasDimmingSlider()}
+
+        {/* 1. 3D ISOMETRIC / PERSPECTIVE ROOM SIMULATION WITH REAL-TIME LUX POINTS */}
         {viewMode === '3d' && (
           <div className="w-full h-full relative cursor-grab active:cursor-grabbing">
             
             <svg 
-              viewBox="0 0 700 420" 
+              viewBox="0 0 750 440" 
               className="w-full h-full"
             >
               <defs>
-                {/* Volumetric Light Gradient */}
                 <radialGradient id="lightConeGrad" cx="50%" cy="0%" r="90%">
-                  <stop offset="0%" stopColor="#f59e0b" stopOpacity="0.75" />
-                  <stop offset="35%" stopColor="#fbbf24" stopOpacity="0.30" />
-                  <stop offset="80%" stopColor="#fef08a" stopOpacity="0.10" />
+                  <stop offset="0%" stopColor="#f59e0b" stopOpacity={0.85 * dimFactor} />
+                  <stop offset="35%" stopColor="#fbbf24" stopOpacity={0.35 * dimFactor} />
+                  <stop offset="80%" stopColor="#fef08a" stopOpacity={0.12 * dimFactor} />
                   <stop offset="100%" stopColor="#fef08a" stopOpacity="0.0" />
                 </radialGradient>
 
-                {/* Floor Illuminance Glow Pattern */}
                 <radialGradient id="floorLuxGlow" cx="50%" cy="50%" r="50%">
-                  <stop offset="0%" stopColor="#f59e0b" stopOpacity="0.45" />
-                  <stop offset="50%" stopColor="#38bdf8" stopOpacity="0.15" />
+                  <stop offset="0%" stopColor="#f59e0b" stopOpacity={0.55 * dimFactor} />
+                  <stop offset="50%" stopColor="#38bdf8" stopOpacity={0.20 * dimFactor} />
                   <stop offset="100%" stopColor="#0f172a" stopOpacity="0.0" />
                 </radialGradient>
 
-                {/* Drop Shadow filter */}
                 <filter id="shadow3d" x="-20%" y="-20%" width="140%" height="140%">
                   <feDropShadow dx="2" dy="4" stdDeviation="3" floodColor="#000000" floodOpacity="0.6" />
                 </filter>
@@ -805,28 +1119,26 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
 
               {/* 3D Floor Surface Polygon */}
               {(() => {
-                const p00 = project3D(0, 0, 0, 700, 420);
-                const pL0 = project3D(roomLength, 0, 0, 700, 420);
-                const pLW = project3D(roomLength, roomWidth, 0, 700, 420);
-                const p0W = project3D(0, roomWidth, 0, 700, 420);
+                const p00 = project3D(0, 0, 0, 750, 440);
+                const pL0 = project3D(roomLength, 0, 0, 750, 440);
+                const pLW = project3D(roomLength, roomWidth, 0, 750, 440);
+                const p0W = project3D(0, roomWidth, 0, 750, 440);
 
                 const floorPoints = `${p00.px},${p00.py} ${pL0.px},${pL0.py} ${pLW.px},${pLW.py} ${p0W.px},${p0W.py}`;
 
                 return (
                   <g id="3d-floor-group">
-                    {/* Floor Base */}
                     <polygon
                       points={floorPoints}
-                      fill="#0f172a"
+                      fill={dimmingPercent === 0 ? '#0b0f19' : '#0f172a'}
                       stroke="#334155"
                       strokeWidth="2"
                     />
 
-                    {/* Floor Tiles / Coordinate Grid (Every 1m) */}
                     {Array.from({ length: Math.ceil(roomLength) + 1 }).map((_, i) => {
                       const x = Math.min(roomLength, i);
-                      const sp = project3D(x, 0, 0, 700, 420);
-                      const ep = project3D(x, roomWidth, 0, 700, 420);
+                      const sp = project3D(x, 0, 0, 750, 440);
+                      const ep = project3D(x, roomWidth, 0, 750, 440);
                       return (
                         <line
                           key={`fg-x-${i}`}
@@ -843,8 +1155,8 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
 
                     {Array.from({ length: Math.ceil(roomWidth) + 1 }).map((_, j) => {
                       const y = Math.min(roomWidth, j);
-                      const sp = project3D(0, y, 0, 700, 420);
-                      const ep = project3D(roomLength, y, 0, 700, 420);
+                      const sp = project3D(0, y, 0, 750, 440);
+                      const ep = project3D(roomLength, y, 0, 750, 440);
                       return (
                         <line
                           key={`fg-y-${j}`}
@@ -859,10 +1171,9 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
                       );
                     })}
 
-                    {/* Floor Lighting Footprint Glow Circles */}
-                    {fixtures3D.map((f, idx) => {
-                      const fp = project3D(f.x, f.y, 0, 700, 420);
-                      const radiusPx = (spacingLength * fp.scale * 0.75);
+                    {dimmingPercent > 0 && fixtures3D.map((f, idx) => {
+                      const fp = project3D(f.x, f.y, 0, 750, 440);
+                      const radiusPx = (spacingLength * fp.scale * (0.5 + 0.3 * dimFactor));
                       return (
                         <ellipse
                           key={`lux-pool-${idx}`}
@@ -878,35 +1189,32 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
                 );
               })()}
 
-              {/* 3D Walls (Back Wall and Left Wall) */}
+              {/* 3D Walls */}
               {(() => {
-                const p00_0 = project3D(0, 0, 0, 700, 420);
-                const pL0_0 = project3D(roomLength, 0, 0, 700, 420);
-                const p0W_0 = project3D(0, roomWidth, 0, 700, 420);
+                const p00_0 = project3D(0, 0, 0, 750, 440);
+                const pL0_0 = project3D(roomLength, 0, 0, 750, 440);
+                const p0W_0 = project3D(0, roomWidth, 0, 750, 440);
 
-                const p00_H = project3D(0, 0, roomHeight, 700, 420);
-                const pL0_H = project3D(roomLength, 0, roomHeight, 700, 420);
-                const p0W_H = project3D(0, roomWidth, roomHeight, 700, 420);
+                const p00_H = project3D(0, 0, roomHeight, 750, 440);
+                const pL0_H = project3D(roomLength, 0, roomHeight, 750, 440);
+                const p0W_H = project3D(0, roomWidth, roomHeight, 750, 440);
 
                 return (
                   <g id="3d-walls-group" className="opacity-85">
-                    {/* Back Wall (Y=0) */}
                     <polygon
                       points={`${p00_0.px},${p00_0.py} ${pL0_0.px},${pL0_0.py} ${pL0_H.px},${pL0_H.py} ${p00_H.px},${p00_H.py}`}
-                      fill="rgba(15, 23, 42, 0.75)"
+                      fill={dimmingPercent === 0 ? 'rgba(10, 15, 26, 0.85)' : 'rgba(15, 23, 42, 0.75)'}
                       stroke="#1e293b"
                       strokeWidth="1.5"
                     />
 
-                    {/* Left Wall (X=0) */}
                     <polygon
                       points={`${p00_0.px},${p00_0.py} ${p0W_0.px},${p0W_0.py} ${p0W_H.px},${p0W_H.py} ${p00_H.px},${p00_H.py}`}
-                      fill="rgba(30, 41, 59, 0.65)"
+                      fill={dimmingPercent === 0 ? 'rgba(15, 23, 42, 0.75)' : 'rgba(30, 41, 59, 0.65)'}
                       stroke="#1e293b"
                       strokeWidth="1.5"
                     />
 
-                    {/* Height Scale Markings on Corner Wall Post */}
                     <line
                       x1={p00_0.px}
                       y1={p00_0.py}
@@ -916,7 +1224,6 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
                       strokeWidth="2.5"
                     />
 
-                    {/* Height Label */}
                     <text
                       x={p00_H.px - 10}
                       y={(p00_0.py + p00_H.py) / 2}
@@ -935,22 +1242,18 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
               {showFurniture && (
                 <g id="3d-furniture-group">
                   {furnitureItems.map((item) => {
-                    // Calculate 8 bounding box corners for the 3D furniture
-                    const p000 = project3D(item.x, item.y, item.z, 700, 420);
-                    const p100 = project3D(item.x + item.w, item.y, item.z, 700, 420);
-                    const p110 = project3D(item.x + item.w, item.y + item.d, item.z, 700, 420);
-                    const p010 = project3D(item.x, item.y + item.d, item.z, 700, 420);
+                    const p000 = project3D(item.x, item.y, item.z, 750, 440);
+                    const p100 = project3D(item.x + item.w, item.y, item.z, 750, 440);
+                    const p110 = project3D(item.x + item.w, item.y + item.d, item.z, 750, 440);
+                    const p010 = project3D(item.x, item.y + item.d, item.z, 750, 440);
 
-                    const p001 = project3D(item.x, item.y, item.z + item.h, 700, 420);
-                    const p101 = project3D(item.x + item.w, item.y, item.z + item.h, 700, 420);
-                    const p111 = project3D(item.x + item.w, item.y + item.d, item.z + item.h, 700, 420);
-                    const p011 = project3D(item.x, item.y + item.d, item.z + item.h, 700, 420);
+                    const p001 = project3D(item.x, item.y, item.z + item.h, 750, 440);
+                    const p101 = project3D(item.x + item.w, item.y, item.z + item.h, 750, 440);
+                    const p111 = project3D(item.x + item.w, item.y + item.d, item.z + item.h, 750, 440);
+                    const p011 = project3D(item.x, item.y + item.d, item.z + item.h, 750, 440);
 
-                    // Top Surface Points
                     const topPoints = `${p001.px},${p001.py} ${p101.px},${p101.py} ${p111.px},${p111.py} ${p011.px},${p011.py}`;
-                    // Front Surface Points
                     const frontPoints = `${p010.px},${p010.py} ${p110.px},${p110.py} ${p111.px},${p111.py} ${p011.px},${p011.py}`;
-                    // Right Surface Points
                     const rightPoints = `${p100.px},${p100.py} ${p110.px},${p110.py} ${p111.px},${p111.py} ${p101.px},${p101.py}`;
 
                     const centerTop = {
@@ -960,13 +1263,11 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
 
                     return (
                       <g key={item.id} className="cursor-pointer group" filter="url(#shadow3d)">
-                        {/* Shadow on Floor */}
                         <polygon
                           points={`${p000.px},${p000.py} ${p100.px},${p100.py} ${p110.px},${p110.py} ${p010.px},${p010.py}`}
                           fill="rgba(0,0,0,0.5)"
                         />
 
-                        {/* Front Side */}
                         <polygon
                           points={frontPoints}
                           fill={item.color}
@@ -975,7 +1276,6 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
                           opacity="0.9"
                         />
 
-                        {/* Right Side */}
                         <polygon
                           points={rightPoints}
                           fill={item.color}
@@ -984,7 +1284,6 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
                           opacity="0.75"
                         />
 
-                        {/* Top Side */}
                         <polygon
                           points={topPoints}
                           fill={item.color}
@@ -993,7 +1292,6 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
                           opacity="1.0"
                         />
 
-                        {/* Furniture Icon & Label Overlay */}
                         <text
                           x={centerTop.x}
                           y={centerTop.y + 4}
@@ -1006,7 +1304,6 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
                           {item.icon}
                         </text>
 
-                        {/* Hover Tooltip for Furniture */}
                         <title>{`${item.name} (${item.label}) - กว้าง ${item.w}m × ยาว ${item.d}m × สูง ${item.h}m`}</title>
                       </g>
                     );
@@ -1014,14 +1311,13 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
                 </g>
               )}
 
-              {/* 3D Volumetric Light Cones (Projected from Luminaire to Floor) */}
-              {showLightCones && (
+              {/* 3D Volumetric Light Cones */}
+              {showLightCones && dimmingPercent > 0 && (
                 <g id="3d-light-cones-group" className="pointer-events-none">
                   {fixtures3D.map((f, idx) => {
-                    const topP = project3D(f.x, f.y, f.z, 700, 420);
-                    const botP = project3D(f.x, f.y, 0, 700, 420);
+                    const topP = project3D(f.x, f.y, f.z, 750, 440);
+                    const botP = project3D(f.x, f.y, 0, 750, 440);
                     
-                    // Cone spread radius on floor based on beam angle
                     const spreadRadiusM = Math.tan(((numericBeamAngle / 2) * Math.PI) / 180) * roomHeight;
                     const spreadPx = spreadRadiusM * topP.scale;
 
@@ -1029,8 +1325,7 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
                     const spreadY = spreadPx * Math.sin(radTilt);
 
                     return (
-                      <g key={`cone-${idx}`} opacity="0.8">
-                        {/* Cone Body Polygon */}
+                      <g key={`cone-${idx}`} opacity={0.85 * dimFactor}>
                         <polygon
                           points={`
                             ${topP.px},${topP.py} 
@@ -1040,14 +1335,13 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
                           fill="url(#lightConeGrad)"
                         />
 
-                        {/* Cone Base Ellipse on Floor */}
                         <ellipse
                           cx={botP.px}
                           cy={botP.py}
                           rx={spreadPx}
                           ry={spreadY}
-                          fill="rgba(245, 158, 11, 0.15)"
-                          stroke="rgba(251, 191, 36, 0.3)"
+                          fill={`rgba(245, 158, 11, ${0.15 * dimFactor})`}
+                          stroke={`rgba(251, 191, 36, ${0.35 * dimFactor})`}
                           strokeWidth="1"
                           strokeDasharray="2,2"
                         />
@@ -1057,10 +1351,75 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
                 </g>
               )}
 
+              {/* 🌟 3D POINT-BY-POINT REAL-TIME LUX VALUE TAGS */}
+              {showPointLux && (
+                <g id="3d-lux-point-badges" className="select-none font-mono">
+                  {sampleLuxPoints.map((pt) => {
+                    const p = project3D(pt.x, pt.y, pt.z, 750, 440);
+                    const isUnder = pt.type === 'under_fixture';
+
+                    return (
+                      <g key={`lux-badge-3d-${pt.id}`} className="cursor-pointer group">
+                        <circle
+                          cx={p.px}
+                          cy={p.py}
+                          r={isUnder ? "3.5" : "2"}
+                          fill={dimmingPercent === 0 ? '#475569' : '#38bdf8'}
+                          stroke="#ffffff"
+                          strokeWidth="0.8"
+                        />
+
+                        <g transform={`translate(${p.px - 18}, ${p.py - 16})`}>
+                          <rect
+                            x="0"
+                            y="0"
+                            width={pt.lux >= 1000 ? "40" : "36"}
+                            height="13"
+                            rx="3"
+                            fill="#090d16"
+                            stroke={
+                              dimmingPercent === 0 
+                                ? '#334155' 
+                                : pt.lux >= targetLux * 0.9 
+                                ? '#10b981' 
+                                : pt.lux >= targetLux * 0.5 
+                                ? '#f59e0b' 
+                                : '#f43f5e'
+                            }
+                            strokeWidth="0.9"
+                            className="drop-shadow"
+                          />
+                          <text
+                            x={pt.lux >= 1000 ? "20" : "18"}
+                            y="9.5"
+                            fill={
+                              dimmingPercent === 0 
+                                ? '#94a3b8' 
+                                : pt.lux >= targetLux * 0.9 
+                                ? '#34d399' 
+                                : pt.lux >= targetLux * 0.5 
+                                ? '#fbbf24' 
+                                : '#fb7185'
+                            }
+                            fontSize="8"
+                            fontWeight="bold"
+                            textAnchor="middle"
+                          >
+                            {pt.lux} lx
+                          </text>
+                        </g>
+
+                        <title>{`${pt.label} | ค่าความสว่าง: ${pt.lux} Lux (หรี่ไฟ ${dimmingPercent}%) | พิกัด (${pt.x.toFixed(1)}m, ${pt.y.toFixed(1)}m, Z=${pt.z.toFixed(2)}m)`}</title>
+                      </g>
+                    );
+                  })}
+                </g>
+              )}
+
               {/* 3D Ceiling Fixtures (Luminaires) */}
               <g id="3d-fixtures-group">
                 {fixtures3D.map((f, idx) => {
-                  const p = project3D(f.x, f.y, f.z, 700, 420);
+                  const p = project3D(f.x, f.y, f.z, 750, 440);
                   const isSelected = selectedFixtureIdx === idx;
 
                   return (
@@ -1072,35 +1431,39 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
                         setSelectedFixtureIdx(isSelected ? null : idx);
                       }}
                     >
-                      {/* Outer Emissive Glow Ring */}
-                      <circle
-                        cx={p.px}
-                        cy={p.py}
-                        r="14"
-                        fill="rgba(245, 158, 11, 0.25)"
-                        className="animate-pulse"
-                      />
+                      {dimmingPercent > 0 && (
+                        <circle
+                          cx={p.px}
+                          cy={p.py}
+                          r={14 * (0.6 + 0.4 * dimFactor)}
+                          fill={`rgba(245, 158, 11, ${0.3 * dimFactor})`}
+                          className="animate-pulse"
+                        />
+                      )}
 
-                      {/* Fixture Mount Disc */}
                       <circle
                         cx={p.px}
                         cy={p.py}
                         r={isSelected ? "9" : "7.5"}
-                        fill={isSelected ? "#fbbf24" : "#f59e0b"}
+                        fill={
+                          dimmingPercent === 0 
+                            ? '#334155' 
+                            : isSelected 
+                            ? '#fbbf24' 
+                            : '#f59e0b'
+                        }
                         stroke="#ffffff"
                         strokeWidth="2"
                         className="transition-all duration-150"
                       />
 
-                      {/* Inner Core */}
                       <circle
                         cx={p.px}
                         cy={p.py}
                         r="3"
-                        fill="#ffffff"
+                        fill={dimmingPercent === 0 ? '#64748b' : '#ffffff'}
                       />
 
-                      {/* Fixture Number Tag */}
                       <text
                         x={p.px}
                         y={p.py - 11}
@@ -1114,8 +1477,7 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
                         #{idx + 1}
                       </text>
 
-                      {/* Tooltip on Hover */}
-                      <title>{`${f.label} | กำลังวัตต์: ${fixtureWatts}W | ลูเมน: ${fixtureLumens} lm | ความสูง: ${roomHeight}m`}</title>
+                      <title>{`${f.label} | กำลังวัตต์จริง: ${(fixtureWatts * dimFactor).toFixed(1)}W | ลูเมน: ${Math.round(fixtureLumens * dimFactor)} lm | หรี่: ${dimmingPercent}%`}</title>
                     </g>
                   );
                 })}
@@ -1124,81 +1486,38 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
               {/* 3D Dimension Callouts Overlay */}
               {showDimensions && (
                 <g id="3d-dimension-callouts" className="pointer-events-none font-mono text-[9px]">
-                  {/* Spacing along Length */}
-                  {(() => {
-                    const p1 = project3D(spacingLength * 0.5, spacingWidth * 0.5, roomHeight, 700, 420);
-                    const p2 = project3D(spacingLength * 1.5, spacingWidth * 0.5, roomHeight, 700, 420);
-                    
-                    if (fixtureRows > 1) {
-                      return (
-                        <g>
-                          <line
-                            x1={p1.px}
-                            y1={p1.py}
-                            x2={p2.px}
-                            y2={p2.py}
-                            stroke="#38bdf8"
-                            strokeWidth="1.5"
-                            strokeDasharray="3,3"
-                          />
-                          <rect
-                            x={(p1.px + p2.px) / 2 - 28}
-                            y={(p1.py + p2.py) / 2 - 7}
-                            width="56"
-                            height="14"
-                            fill="#0f172a"
-                            rx="3"
-                            stroke="#0284c7"
-                            strokeWidth="0.8"
-                          />
-                          <text
-                            x={(p1.px + p2.px) / 2}
-                            y={(p1.py + p2.py) / 2 + 3}
-                            fill="#38bdf8"
-                            fontWeight="bold"
-                            textAnchor="middle"
-                          >
-                            S_L = {spacingLength.toFixed(2)}m
-                          </text>
-                        </g>
-                      );
-                    }
-                    return null;
-                  })()}
-
-                  {/* Wall Spacing Callout */}
-                  {(() => {
-                    const p0 = project3D(0, spacingWidth * 0.5, roomHeight, 700, 420);
-                    const p1 = project3D(spacingLength * 0.5, spacingWidth * 0.5, roomHeight, 700, 420);
+                  {fixtureRows > 1 && (() => {
+                    const p1 = project3D(spacingLength * 0.5, spacingWidth * 0.5, roomHeight, 750, 440);
+                    const p2 = project3D(spacingLength * 1.5, spacingWidth * 0.5, roomHeight, 750, 440);
                     return (
                       <g>
                         <line
-                          x1={p0.px}
-                          y1={p0.py}
-                          x2={p1.px}
-                          y2={p1.py}
-                          stroke="#fb7185"
-                          strokeWidth="1.2"
-                          strokeDasharray="2,2"
+                          x1={p1.px}
+                          y1={p1.py}
+                          x2={p2.px}
+                          y2={p2.py}
+                          stroke="#38bdf8"
+                          strokeWidth="1.5"
+                          strokeDasharray="3,3"
                         />
                         <rect
-                          x={(p0.px + p1.px) / 2 - 24}
-                          y={(p0.py + p1.py) / 2 - 6}
-                          width="48"
-                          height="12"
+                          x={(p1.px + p2.px) / 2 - 28}
+                          y={(p1.py + p2.py) / 2 - 7}
+                          width="56"
+                          height="14"
                           fill="#0f172a"
-                          rx="2"
-                          stroke="#e11d48"
-                          strokeWidth="0.6"
+                          rx="3"
+                          stroke="#0284c7"
+                          strokeWidth="0.8"
                         />
                         <text
-                          x={(p0.px + p1.px) / 2}
-                          y={(p0.py + p1.py) / 2 + 3}
-                          fill="#fb7185"
+                          x={(p1.px + p2.px) / 2}
+                          y={(p1.py + p2.py) / 2 + 3}
+                          fill="#38bdf8"
                           fontWeight="bold"
                           textAnchor="middle"
                         >
-                          ผนัง: {wallSpacingLength.toFixed(2)}m
+                          S_L = {spacingLength.toFixed(2)}m
                         </text>
                       </g>
                     );
@@ -1208,13 +1527,13 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
 
             </svg>
 
-            {/* Drag & Orbit Hints / On-screen 3D Controls */}
+            {/* Orbit & Drag Hint */}
             <div className="absolute bottom-2.5 left-3 flex items-center gap-2 bg-slate-900/90 backdrop-blur px-3 py-1.5 rounded-xl border border-slate-800 text-[11px] text-slate-300 shadow-lg">
               <Compass className="w-3.5 h-3.5 text-amber-400" />
-              <span>คลิกและลากเมาส์เพื่อหมุนมุมมอง 3D ({Math.round(rotationAngle)}°, {Math.round(tiltAngle)}°)</span>
+              <span>คลิกและลากเมาส์เพื่อหมุนห้อง 3D ({Math.round(rotationAngle)}°, {Math.round(tiltAngle)}°) | ซูม {Math.round(zoomLevel3D * 100)}%</span>
             </div>
 
-            {/* 3D Camera Quick Rotation Buttons */}
+            {/* Quick 3D Rotation Orbit Buttons */}
             <div className="absolute bottom-2.5 right-3 flex items-center gap-1.5 bg-slate-900/90 backdrop-blur p-1 rounded-xl border border-slate-800 shadow-lg">
               <button
                 type="button"
@@ -1253,18 +1572,18 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
           </div>
         )}
 
-        {/* 2. 2D ARCHITECTURAL CEILING BLUEPRINT WITH PRECISE DIMENSIONS */}
+        {/* 2. 2D ARCHITECTURAL BLUEPRINT WITH SCALABLE ZOOM & IN-CANVAS SLIDER */}
         {viewMode === '2d' && (
           <div className="w-full h-full relative p-4 flex items-center justify-center">
             
             {(() => {
-              // Calculate SVG bounds with padding for outer dimension lines
-              const padX = 65; // margin for left width dimensions
-              const padY = 55; // margin for top length dimensions
-              const scale = Math.min(
-                (600 - padX * 2) / Math.max(1, roomLength),
-                (350 - padY * 2) / Math.max(1, roomWidth)
+              const padX = 65;
+              const padY = 55;
+              const baseScale = Math.min(
+                (650 - padX * 2) / Math.max(1, roomLength),
+                (380 - padY * 2) / Math.max(1, roomWidth)
               );
+              const scale = baseScale * zoomLevel2D;
 
               const svgW = roomLength * scale + padX * 2;
               const svgH = roomWidth * scale + padY * 2;
@@ -1275,7 +1594,26 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
               return (
                 <svg
                   viewBox={`0 0 ${svgW} ${svgH}`}
-                  className="w-full h-full max-h-84 drop-shadow-xl"
+                  className="w-full h-full max-h-full drop-shadow-xl"
+                  onMouseMove={(e) => {
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    const mouseSvgX = ((e.clientX - rect.left) / rect.width) * svgW;
+                    const mouseSvgY = ((e.clientY - rect.top) / rect.height) * svgH;
+
+                    const roomX = (mouseSvgX - originX) / scale;
+                    const roomY = (mouseSvgY - originY) / scale;
+
+                    if (roomX >= 0 && roomX <= roomLength && roomY >= 0 && roomY <= roomWidth) {
+                      setHoverProbePos({
+                        x: roomX,
+                        y: roomY,
+                        lux: calculatePointLux(roomX, roomY, workplaneHeight)
+                      });
+                    } else {
+                      setHoverProbePos(null);
+                    }
+                  }}
+                  onMouseLeave={() => setHoverProbePos(null)}
                 >
                   <defs>
                     <pattern id="cadGrid" width={scale} height={scale} patternUnits="userSpaceOnUse">
@@ -1283,19 +1621,17 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
                     </pattern>
                   </defs>
 
-                  {/* Outer CAD Background Grid */}
                   <rect
                     x={originX}
                     y={originY}
                     width={roomLength * scale}
                     height={roomWidth * scale}
-                    fill="#090d16"
+                    fill={dimmingPercent === 0 ? '#070a12' : '#090d16'}
                     stroke="#475569"
                     strokeWidth="2.5"
                     rx="4"
                   />
 
-                  {/* Sub-grid (1m x 1m) */}
                   <rect
                     x={originX}
                     y={originY}
@@ -1304,7 +1640,6 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
                     fill="url(#cadGrid)"
                   />
 
-                  {/* 2D Architectural Furniture Overlays */}
                   {showFurniture && (
                     <g id="2d-furniture-layout" className="opacity-90">
                       {furnitureItems.map((item) => {
@@ -1315,7 +1650,6 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
 
                         return (
                           <g key={`2d-furn-${item.id}`}>
-                            {/* Furniture 2D Rectangle */}
                             <rect
                               x={fx}
                               y={fy}
@@ -1327,7 +1661,6 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
                               rx="3"
                               opacity="0.85"
                             />
-                            {/* Inner Accent Line */}
                             <rect
                               x={fx + 2}
                               y={fy + 2}
@@ -1337,7 +1670,6 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
                               stroke="rgba(255,255,255,0.2)"
                               strokeWidth="0.8"
                             />
-                            {/* Label */}
                             <text
                               x={fx + fw / 2}
                               y={fy + fh / 2 + 3}
@@ -1355,37 +1687,35 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
                     </g>
                   )}
 
-                  {/* Fixture Light Coverage Pools (Radius) */}
                   {Array.from({ length: fixtureRows }).flatMap((_, r) =>
                     Array.from({ length: fixtureCols }).map((_, c) => {
                       const cx = originX + (r + 0.5) * (spacingLength * scale);
                       const cy = originY + (c + 0.5) * (spacingWidth * scale);
-                      const radiusPx = (spacingLength * scale * 0.7);
+                      const radiusPx = (spacingLength * scale * (0.5 + 0.3 * dimFactor));
 
                       return (
                         <g key={`2d-fixture-${r}-${c}`}>
-                          {/* Outer Beam Overlap Circle */}
-                          <circle
-                            cx={cx}
-                            cy={cy}
-                            r={radiusPx}
-                            fill="rgba(245, 158, 11, 0.12)"
-                            stroke="rgba(251, 191, 36, 0.25)"
-                            strokeWidth="0.8"
-                            strokeDasharray="2,2"
-                          />
+                          {dimmingPercent > 0 && (
+                            <circle
+                              cx={cx}
+                              cy={cy}
+                              r={radiusPx}
+                              fill={`rgba(245, 158, 11, ${0.14 * dimFactor})`}
+                              stroke={`rgba(251, 191, 36, ${0.3 * dimFactor})`}
+                              strokeWidth="0.8"
+                              strokeDasharray="2,2"
+                            />
+                          )}
 
-                          {/* Fixture Node Center */}
                           <circle
                             cx={cx}
                             cy={cy}
                             r="6"
-                            fill="#f59e0b"
+                            fill={dimmingPercent === 0 ? '#334155' : '#f59e0b'}
                             stroke="#ffffff"
                             strokeWidth="1.8"
                           />
                           
-                          {/* Center Dot */}
                           <circle
                             cx={cx}
                             cy={cy}
@@ -1393,7 +1723,6 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
                             fill="#0f172a"
                           />
 
-                          {/* Coordinate Tag */}
                           <text
                             x={cx}
                             y={cy - 9}
@@ -1410,21 +1739,105 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
                     })
                   )}
 
-                  {/* Detailed Dimension Lines (All Axes) */}
+                  {showPointLux && (
+                    <g id="2d-point-lux-values" className="select-none font-mono">
+                      {sampleLuxPoints.map((pt) => {
+                        const px = originX + pt.x * scale;
+                        const py = originY + pt.y * scale;
+
+                        return (
+                          <g key={`2d-lux-pt-${pt.id}`} className="cursor-pointer">
+                            <circle
+                              cx={px}
+                              cy={py}
+                              r="2"
+                              fill="#38bdf8"
+                            />
+                            <g transform={`translate(${px - 17}, ${py + 4})`}>
+                              <rect
+                                x="0"
+                                y="0"
+                                width={pt.lux >= 1000 ? "38" : "34"}
+                                height="12"
+                                rx="2.5"
+                                fill="#070a12"
+                                stroke={
+                                  dimmingPercent === 0
+                                    ? '#334155'
+                                    : pt.lux >= targetLux * 0.9
+                                    ? '#10b981'
+                                    : pt.lux >= targetLux * 0.5
+                                    ? '#f59e0b'
+                                    : '#f43f5e'
+                                }
+                                strokeWidth="0.8"
+                              />
+                              <text
+                                x={pt.lux >= 1000 ? "19" : "17"}
+                                y="9"
+                                fill={
+                                  dimmingPercent === 0
+                                    ? '#94a3b8'
+                                    : pt.lux >= targetLux * 0.9
+                                    ? '#34d399'
+                                    : pt.lux >= targetLux * 0.5
+                                    ? '#fbbf24'
+                                    : '#fb7185'
+                                }
+                                fontSize="7.5"
+                                fontWeight="bold"
+                                textAnchor="middle"
+                              >
+                                {pt.lux} lx
+                              </text>
+                            </g>
+                          </g>
+                        );
+                      })}
+                    </g>
+                  )}
+
+                  {hoverProbePos && (
+                    <g id="2d-hover-probe" className="pointer-events-none font-mono">
+                      <line
+                        x1={originX + hoverProbePos.x * scale}
+                        y1={originY}
+                        x2={originX + hoverProbePos.x * scale}
+                        y2={originY + roomWidth * scale}
+                        stroke="#f59e0b"
+                        strokeWidth="1"
+                        strokeDasharray="2,2"
+                      />
+                      <line
+                        x1={originX}
+                        y1={originY + hoverProbePos.y * scale}
+                        x2={originX + roomLength * scale}
+                        y2={originY + hoverProbePos.y * scale}
+                        stroke="#f59e0b"
+                        strokeWidth="1"
+                        strokeDasharray="2,2"
+                      />
+                      <circle
+                        cx={originX + hoverProbePos.x * scale}
+                        cy={originY + hoverProbePos.y * scale}
+                        r="4"
+                        fill="#f59e0b"
+                        stroke="#ffffff"
+                        strokeWidth="1.5"
+                      />
+                    </g>
+                  )}
+
                   {showDimensions && (
                     <g id="2d-dimension-annotations">
-                      
-                      {/* Top Overall Length: L = ... m */}
                       {renderDimensionLine(
                         originX,
                         originY - 30,
                         originX + roomLength * scale,
                         originY - 30,
-                        `ความยาวรวม L = ${roomLength}m`
+                        `L = ${roomLength}m`
                       )}
 
-                      {/* Top Sub-dimensions (Wall Spacing & Fixture Spacings along Length) */}
-                      {/* Wall to first fixture */}
                       {renderDimensionLine(
                         originX,
                         originY - 14,
@@ -1433,7 +1846,6 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
                         `${wallSpacingLength.toFixed(2)}m`
                       )}
 
-                      {/* Intermediate Spacings */}
                       {Array.from({ length: Math.max(0, fixtureRows - 1) }).map((_, r) => {
                         const sx = originX + (r + 0.5) * (spacingLength * scale);
                         const ex = originX + (r + 1.5) * (spacingLength * scale);
@@ -1450,7 +1862,6 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
                         );
                       })}
 
-                      {/* Last Fixture to Right Wall */}
                       {renderDimensionLine(
                         originX + (roomLength - wallSpacingLength) * scale,
                         originY - 14,
@@ -1459,7 +1870,6 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
                         `${wallSpacingLength.toFixed(2)}m`
                       )}
 
-                      {/* Left Overall Width: W = ... m */}
                       {renderDimensionLine(
                         originX - 42,
                         originY,
@@ -1470,7 +1880,6 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
                         true
                       )}
 
-                      {/* Left Sub-dimensions (Wall to first & Spacings along Width) */}
                       {renderDimensionLine(
                         originX - 20,
                         originY,
@@ -1508,7 +1917,6 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
                         0,
                         true
                       )}
-
                     </g>
                   )}
 
@@ -1516,39 +1924,49 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
               );
             })()}
 
+            {hoverProbePos && (
+              <div className="absolute top-3 right-3 bg-slate-900/95 backdrop-blur px-3 py-1.5 rounded-xl border border-amber-500/60 shadow-xl text-xs flex items-center gap-2">
+                <Gauge className="w-4 h-4 text-amber-400 animate-pulse" />
+                <div>
+                  <div className="text-[10px] text-slate-400">
+                    พิกัด ({hoverProbePos.x.toFixed(2)}m, {hoverProbePos.y.toFixed(2)}m)
+                  </div>
+                  <div className="font-mono font-bold text-amber-300">
+                    {hoverProbePos.lux} Lux
+                  </div>
+                </div>
+              </div>
+            )}
+
           </div>
         )}
 
-        {/* 3. ELEVATION CROSS SECTION (รูปตัดด้านข้าง แสดงความสูงและระนาบงาน) */}
+        {/* 3. ELEVATION CROSS SECTION */}
         {viewMode === 'elevation' && (
           <div className="w-full h-full p-4 flex items-center justify-center">
             <svg viewBox="0 0 620 320" className="w-full h-full max-h-80 drop-shadow-xl">
               
-              {/* Room Box (Elevation Side View) */}
               <rect
                 x="80"
                 y="40"
                 width="460"
                 height="220"
-                fill="#0f172a"
+                fill={dimmingPercent === 0 ? '#090d16' : '#0f172a'}
                 stroke="#475569"
                 strokeWidth="2.5"
                 rx="4"
               />
 
-              {/* Ceiling Slab Line */}
               <line x1="80" y1="40" x2="540" y2="40" stroke="#f59e0b" strokeWidth="4" />
               <text x="548" y="44" fill="#fbbf24" fontSize="10" fontWeight="bold" fontFamily="monospace">
-                ฝ้าเพดาน (Ceiling) H={roomHeight}m
+                ฝ้าเพดาน H={roomHeight}m
               </text>
 
-              {/* Floor Slab Line */}
               <line x1="80" y1="260" x2="540" y2="260" stroke="#64748b" strokeWidth="4" />
               <text x="548" y="264" fill="#94a3b8" fontSize="10" fontWeight="bold" fontFamily="monospace">
-                ระดับพื้นห้อง (Floor Level 0.00m)
+                ระดับพื้น 0.00m
               </text>
 
-              {/* Workplane (ระนาบงาน 0.75m) */}
               {(() => {
                 const workplaneY = 260 - (workplaneHeight / roomHeight) * 220;
                 return (
@@ -1563,13 +1981,12 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
                       strokeDasharray="4,4"
                     />
                     <text x="548" y={workplaneY + 3} fill="#38bdf8" fontSize="9" fontWeight="bold" fontFamily="monospace">
-                      ระนาบโต๊ะทำงาน (Workplane) {workplaneHeight}m
+                      ระนาบงาน {workplaneHeight}m ({currentEffectiveLux} Lux)
                     </text>
                   </g>
                 );
               })()}
 
-              {/* Elevation Fixture Cones and Luminaires along Length */}
               {Array.from({ length: fixtureRows }).map((_, r) => {
                 const fx = 80 + (r + 0.5) * (460 / fixtureRows);
                 const fy = 40;
@@ -1577,30 +1994,29 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
 
                 return (
                   <g key={`elev-f-${r}`}>
-                    {/* Beam Cone */}
-                    <polygon
-                      points={`${fx},${fy} ${fx - coneSpreadPx},260 ${fx + coneSpreadPx},260`}
-                      fill="url(#lightConeGrad)"
-                      opacity="0.65"
-                    />
+                    {dimmingPercent > 0 && (
+                      <polygon
+                        points={`${fx},${fy} ${fx - coneSpreadPx},260 ${fx + coneSpreadPx},260`}
+                        fill="url(#lightConeGrad)"
+                        opacity={0.7 * dimFactor}
+                      />
+                    )}
 
-                    {/* Fixture on Ceiling */}
                     <rect
                       x={fx - 14}
                       y="36"
                       width="28"
                       height="8"
-                      fill="#f59e0b"
+                      fill={dimmingPercent === 0 ? '#334155' : '#f59e0b'}
                       stroke="#ffffff"
                       strokeWidth="1.5"
                       rx="2"
                     />
-                    <circle cx={fx} cy="44" r="4" fill="#ffffff" />
+                    <circle cx={fx} cy="44" r="4" fill={dimmingPercent === 0 ? '#64748b' : '#ffffff'} />
                   </g>
                 );
               })}
 
-              {/* Height Dimension Line on Left */}
               {renderDimensionLine(50, 40, 50, 260, `H=${roomHeight}m`, 0, true)}
 
             </svg>
@@ -1609,43 +2025,31 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
 
       </div>
 
-      {/* Visualizer Bottom Detail Legend Bar */}
+      {/* Visualizer Bottom Detail Legend Bar & Lux Color Scale */}
       <div className="p-3 bg-slate-900 border-t border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs">
         
-        {/* Left: Luminaire & Grid Information */}
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-1.5 font-bold text-amber-400">
-            <span className="text-base">{luminaireIcon}</span>
-            <span>{luminaireName}</span>
-          </div>
-
-          <div className="h-3 w-px bg-slate-700 hidden sm:block"></div>
-
-          <div className="text-slate-300">
-            <span>ผังติดตั้ง: </span>
-            <span className="font-mono font-bold text-white">
-              {fixtureCols} แถว (กว้าง) × {fixtureRows} แถว (ยาว) = {totalFixtures} โคม
-            </span>
-          </div>
-
-          <div className="h-3 w-px bg-slate-700 hidden sm:block"></div>
-
-          <div className="text-slate-300">
-            <span>ระยะห่างโคม: </span>
-            <span className="font-mono font-bold text-sky-400">
-              S_L = {spacingLength.toFixed(2)}m | S_W = {spacingWidth.toFixed(2)}m
-            </span>
-          </div>
+        {/* Left: Lux Color Meaning Scale */}
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[11px] text-slate-400 font-bold">แถบสีระดับ Lux:</span>
+          <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800 text-[10px] font-mono font-bold">
+            🟢 สว่างตามเป้าหมาย (≥90%)
+          </span>
+          <span className="px-2 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-800 text-[10px] font-mono font-bold">
+            🟡 ปานกลาง (55-89%)
+          </span>
+          <span className="px-2 py-0.5 rounded bg-rose-950 text-rose-300 border border-rose-800 text-[10px] font-mono font-bold">
+            🔴 ต่ำ/ขอบมุม (&lt;55%)
+          </span>
         </div>
 
         {/* Right: Actual Lux & Target Badge */}
         <div className="flex items-center gap-2">
-          <span className="text-slate-400">ความสว่างคำนวณจริง:</span>
+          <span className="text-slate-400">ความสว่างหรี่จริง:</span>
           <span className="px-2.5 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-800 font-mono font-black text-sm">
-            {Math.round(calculatedLux)} Lux
+            {currentEffectiveLux} Lux
           </span>
           <span className="text-[10px] text-slate-500">
-            (เป้าหมาย: {targetLux} Lux)
+            (100% สเปก = {calculatedLux} Lux)
           </span>
         </div>
 
