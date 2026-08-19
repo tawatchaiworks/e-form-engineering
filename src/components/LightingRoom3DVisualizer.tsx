@@ -38,6 +38,9 @@ export interface LightingRoom3DVisualizerProps {
   beamAngleText?: string;
   luminaireName?: string;
   luminaireIcon?: string;
+  selectedBeamAngle?: number;
+  onSelectBeamAngle?: (angle: number) => void;
+  isDownlightOrSpot?: boolean;
 }
 
 export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> = ({
@@ -55,7 +58,10 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
   targetLux,
   beamAngleText = '110°',
   luminaireName = 'โคมไฟส่องสว่าง',
-  luminaireIcon = '💡'
+  luminaireIcon = '💡',
+  selectedBeamAngle,
+  onSelectBeamAngle,
+  isDownlightOrSpot = false
 }) => {
   // View mode: '3d' | '2d' | 'elevation'
   const [viewMode, setViewMode] = useState<'3d' | '2d' | 'elevation'>('3d');
@@ -76,6 +82,8 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
 
   // Feature Toggles
   const [showPointLux, setShowPointLux] = useState<boolean>(true); // Show real-time Lux badges on points
+  const [luxDensityMode, setLuxDensityMode] = useState<'surrounding' | 'key_points'>('surrounding'); // 'surrounding' shows all inter-fixture & perimeter points
+  const [showInterFixtureLines, setShowInterFixtureLines] = useState<boolean>(true); // Show inter-fixture grid connector lines
   const [showLightCones, setShowLightCones] = useState<boolean>(true);
   const [showFurniture, setShowFurniture] = useState<boolean>(true);
   const [showDimensions, setShowDimensions] = useState<boolean>(true);
@@ -97,11 +105,12 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
   const currentEffectiveLumens = Math.round(totalFixtures * fixtureLumens * dimFactor);
   const currentEffectiveWatts = (totalFixtures * fixtureWatts * dimFactor).toFixed(1);
 
-  // Beam angle parsing (extract number or default to 90)
+  // Beam angle parsing (extract number from 10° to 130°)
   const numericBeamAngle = useMemo(() => {
+    if (selectedBeamAngle && selectedBeamAngle > 0) return selectedBeamAngle;
     const match = beamAngleText.match(/(\d+)/);
-    return match ? Math.min(130, Math.max(20, parseInt(match[1], 10))) : 90;
-  }, [beamAngleText]);
+    return match ? Math.min(130, Math.max(8, parseInt(match[1], 10))) : 90;
+  }, [beamAngleText, selectedBeamAngle]);
 
   // Zoom handlers
   const handleZoomIn = () => {
@@ -623,7 +632,7 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
     return items;
   }, [selectedRoomType, roomLength, roomWidth, roomHeight]);
 
-  // 📍 Sample Key Points for Lux Display across Room Grid
+  // 📍 Sample Key Points for Lux Display across Room Grid (Surrounding Luminaires in All Directions)
   const sampleLuxPoints = useMemo(() => {
     const points: Array<{
       id: string;
@@ -631,11 +640,18 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
       y: number;
       z: number;
       label: string;
+      subLabel: string;
       lux: number;
-      type: 'under_fixture' | 'midpoint' | 'corner' | 'center' | 'furniture';
+      type: 'under_fixture' | 'mid_row_x' | 'mid_col_y' | 'quad_center' | 'perimeter' | 'corner' | 'center' | 'furniture';
+      icon: string;
     }> = [];
 
-    // 1. Point under each Luminaire
+    // Helper to avoid overlapping points at almost identical (x,y)
+    const isDuplicate = (x: number, y: number) => {
+      return points.some((p) => Math.abs(p.x - x) < 0.12 && Math.abs(p.y - y) < 0.12);
+    };
+
+    // 1. ⚡ Direct Under Luminaire Points (Nadir Lux - Peak intensity under each fixture)
     fixtures3D.forEach((f, idx) => {
       points.push({
         id: `under-${idx}`,
@@ -643,79 +659,257 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
         y: f.y,
         z: workplaneHeight,
         label: `ใต้โคม #${idx + 1}`,
+        subLabel: `Nadir (R${f.rowIdx + 1}, C${f.colIdx + 1})`,
         lux: calculatePointLux(f.x, f.y, workplaneHeight),
-        type: 'under_fixture'
+        type: 'under_fixture',
+        icon: '⚡'
       });
     });
 
-    // 2. Midpoint between adjacent luminaires
+    // 2. ↔ Midpoints Between Adjacent Luminaires along Length / X-axis
     if (fixtureRows > 1) {
       for (let r = 0; r < fixtureRows - 1; r++) {
         for (let c = 0; c < fixtureCols; c++) {
           const mx = (r + 1.0) * spacingLength;
           const my = (c + 0.5) * spacingWidth;
+          if (!isDuplicate(mx, my)) {
+            points.push({
+              id: `mid-x-${r}-${c}`,
+              x: mx,
+              y: my,
+              z: workplaneHeight,
+              label: `ระหว่างโคมแนวยาว`,
+              subLabel: `#${r * fixtureCols + c + 1} ↔ #${(r + 1) * fixtureCols + c + 1}`,
+              lux: calculatePointLux(mx, my, workplaneHeight),
+              type: 'mid_row_x',
+              icon: '↔'
+            });
+          }
+        }
+      }
+    }
+
+    // 3. ↕ Midpoints Between Adjacent Luminaires along Width / Y-axis
+    if (fixtureCols > 1) {
+      for (let r = 0; r < fixtureRows; r++) {
+        for (let c = 0; c < fixtureCols - 1; c++) {
+          const mx = (r + 0.5) * spacingLength;
+          const my = (c + 1.0) * spacingWidth;
+          if (!isDuplicate(mx, my)) {
+            points.push({
+              id: `mid-y-${r}-${c}`,
+              x: mx,
+              y: my,
+              z: workplaneHeight,
+              label: `ระหว่างโคมแนวกว้าง`,
+              subLabel: `#${r * fixtureCols + c + 1} ↕ #${r * fixtureCols + c + 2}`,
+              lux: calculatePointLux(mx, my, workplaneHeight),
+              type: 'mid_col_y',
+              icon: '↕'
+            });
+          }
+        }
+      }
+    }
+
+    // 4. ✛ Quad Intersections (Center point between 4 surrounding fixtures)
+    if (fixtureRows > 1 && fixtureCols > 1) {
+      for (let r = 0; r < fixtureRows - 1; r++) {
+        for (let c = 0; c < fixtureCols - 1; c++) {
+          const mx = (r + 1.0) * spacingLength;
+          const my = (c + 1.0) * spacingWidth;
+          if (!isDuplicate(mx, my)) {
+            points.push({
+              id: `quad-${r}-${c}`,
+              x: mx,
+              y: my,
+              z: workplaneHeight,
+              label: `กึ่งกลาง 4 โคม`,
+              subLabel: `Quad Center (R${r + 1}-${r + 2}, C${c + 1}-${c + 2})`,
+              lux: calculatePointLux(mx, my, workplaneHeight),
+              type: 'quad_center',
+              icon: '✛'
+            });
+          }
+        }
+      }
+    }
+
+    // 5. ▫ Perimeter Points Around Fixtures (North, South, East, West between outer fixtures & walls)
+    if (luxDensityMode === 'surrounding') {
+      // Left & Right Wall Perimeters
+      for (let c = 0; c < fixtureCols; c++) {
+        const leftX = wallSpacingLength * 0.5;
+        const rightX = roomLength - wallSpacingLength * 0.5;
+        const my = (c + 0.5) * spacingWidth;
+
+        if (!isDuplicate(leftX, my)) {
           points.push({
-            id: `mid-row-${r}-${c}`,
-            x: mx,
+            id: `perim-left-${c}`,
+            x: leftX,
             y: my,
             z: workplaneHeight,
-            label: `กึ่งกลางโคม`,
-            lux: calculatePointLux(mx, my, workplaneHeight),
-            type: 'midpoint'
+            label: `ริมผนังซ้ายรอบโคม`,
+            subLabel: `Wall-Left (C${c + 1})`,
+            lux: calculatePointLux(leftX, my, workplaneHeight),
+            type: 'perimeter',
+            icon: '▫'
+          });
+        }
+
+        if (!isDuplicate(rightX, my)) {
+          points.push({
+            id: `perim-right-${c}`,
+            x: rightX,
+            y: my,
+            z: workplaneHeight,
+            label: `ริมผนังขวารอบโคม`,
+            subLabel: `Wall-Right (C${c + 1})`,
+            lux: calculatePointLux(rightX, my, workplaneHeight),
+            type: 'perimeter',
+            icon: '▫'
+          });
+        }
+      }
+
+      // Top & Bottom Wall Perimeters
+      for (let r = 0; r < fixtureRows; r++) {
+        const topY = wallSpacingWidth * 0.5;
+        const botY = roomWidth - wallSpacingWidth * 0.5;
+        const mx = (r + 0.5) * spacingLength;
+
+        if (!isDuplicate(mx, topY)) {
+          points.push({
+            id: `perim-top-${r}`,
+            x: mx,
+            y: topY,
+            z: workplaneHeight,
+            label: `ริมผนังบนรอบโคม`,
+            subLabel: `Wall-Top (R${r + 1})`,
+            lux: calculatePointLux(mx, topY, workplaneHeight),
+            type: 'perimeter',
+            icon: '▫'
+          });
+        }
+
+        if (!isDuplicate(mx, botY)) {
+          points.push({
+            id: `perim-bot-${r}`,
+            x: mx,
+            y: botY,
+            z: workplaneHeight,
+            label: `ริมผนังล่างรอบโคม`,
+            subLabel: `Wall-Bottom (R${r + 1})`,
+            lux: calculatePointLux(mx, botY, workplaneHeight),
+            type: 'perimeter',
+            icon: '▫'
           });
         }
       }
     }
 
-    // 3. Room Center Point
-    points.push({
-      id: 'center-room',
-      x: roomLength / 2,
-      y: roomWidth / 2,
-      z: workplaneHeight,
-      label: 'กึ่งกลางห้อง',
-      lux: calculatePointLux(roomLength / 2, roomWidth / 2, workplaneHeight),
-      type: 'center'
-    });
-
-    // 4. Four Corners
-    const cornerInsetX = Math.min(0.8, roomLength * 0.15);
-    const cornerInsetY = Math.min(0.8, roomWidth * 0.15);
+    // 6. ◤ Four Corners of Room
+    const cornerInsetX = Math.min(0.6, Math.max(0.25, wallSpacingLength * 0.5));
+    const cornerInsetY = Math.min(0.6, Math.max(0.25, wallSpacingWidth * 0.5));
     [
-      { x: cornerInsetX, y: cornerInsetY, lbl: 'มุมห้อง 1' },
-      { x: roomLength - cornerInsetX, y: cornerInsetY, lbl: 'มุมห้อง 2' },
-      { x: cornerInsetX, y: roomWidth - cornerInsetY, lbl: 'มุมห้อง 3' },
-      { x: roomLength - cornerInsetX, y: roomWidth - cornerInsetY, lbl: 'มุมห้อง 4' }
+      { x: cornerInsetX, y: cornerInsetY, lbl: 'มุมห้อง 1 (NW)', sub: 'Top-Left Corner' },
+      { x: roomLength - cornerInsetX, y: cornerInsetY, lbl: 'มุมห้อง 2 (NE)', sub: 'Top-Right Corner' },
+      { x: cornerInsetX, y: roomWidth - cornerInsetY, lbl: 'มุมห้อง 3 (SW)', sub: 'Bottom-Left Corner' },
+      { x: roomLength - cornerInsetX, y: roomWidth - cornerInsetY, lbl: 'มุมห้อง 4 (SE)', sub: 'Bottom-Right Corner' }
     ].forEach((c, idx) => {
-      points.push({
-        id: `corner-${idx}`,
-        x: c.x,
-        y: c.y,
-        z: workplaneHeight,
-        label: c.lbl,
-        lux: calculatePointLux(c.x, c.y, workplaneHeight),
-        type: 'corner'
-      });
+      if (!isDuplicate(c.x, c.y)) {
+        points.push({
+          id: `corner-${idx}`,
+          x: c.x,
+          y: c.y,
+          z: workplaneHeight,
+          label: c.lbl,
+          subLabel: c.sub,
+          lux: calculatePointLux(c.x, c.y, workplaneHeight),
+          type: 'corner',
+          icon: '◤'
+        });
+      }
     });
 
-    // 5. Furniture surface points
-    furnitureItems.slice(0, 2).forEach((furn) => {
-      const fx = furn.x + furn.w / 2;
-      const fy = furn.y + furn.d / 2;
-      const fz = furn.z + furn.h;
+    // 7. ◎ Room Center Point
+    const centerX = roomLength / 2;
+    const centerY = roomWidth / 2;
+    if (!isDuplicate(centerX, centerY)) {
       points.push({
-        id: `furn-${furn.id}`,
-        x: fx,
-        y: fy,
-        z: fz,
-        label: `บน${furn.name.split(' ')[0]}`,
-        lux: calculatePointLux(fx, fy, fz),
-        type: 'furniture'
+        id: 'center-room',
+        x: centerX,
+        y: centerY,
+        z: workplaneHeight,
+        label: 'กึ่งกลางห้อง',
+        subLabel: 'Room Center',
+        lux: calculatePointLux(centerX, centerY, workplaneHeight),
+        type: 'center',
+        icon: '◎'
       });
-    });
+    }
+
+    // 8. 🪑 Furniture Surface Points (if visible)
+    if (showFurniture) {
+      furnitureItems.slice(0, 2).forEach((furn) => {
+        const fx = furn.x + furn.w / 2;
+        const fy = furn.y + furn.d / 2;
+        const fz = furn.z + furn.h;
+        if (!isDuplicate(fx, fy)) {
+          points.push({
+            id: `furn-${furn.id}`,
+            x: fx,
+            y: fy,
+            z: fz,
+            label: `บน${furn.name.split(' ')[0]}`,
+            subLabel: `Work Surface (H=${fz.toFixed(2)}m)`,
+            lux: calculatePointLux(fx, fy, fz),
+            type: 'furniture',
+            icon: '🪑'
+          });
+        }
+      });
+    }
 
     return points;
-  }, [fixtures3D, fixtureRows, fixtureCols, spacingLength, spacingWidth, roomLength, roomWidth, workplaneHeight, furnitureItems, dimmingPercent, calculatedLux, numericBeamAngle, fixtureLumens]);
+  }, [
+    fixtures3D,
+    fixtureRows,
+    fixtureCols,
+    spacingLength,
+    spacingWidth,
+    wallSpacingLength,
+    wallSpacingWidth,
+    roomLength,
+    roomWidth,
+    workplaneHeight,
+    furnitureItems,
+    showFurniture,
+    luxDensityMode,
+    dimmingPercent,
+    calculatedLux,
+    numericBeamAngle,
+    fixtureLumens,
+    dimFactor
+  ]);
+
+  // 📊 Point Photometric Metrics (Min, Max, Avg, Uniformity Ratio U0 = Emin / Eavg)
+  const luxStats = useMemo(() => {
+    if (sampleLuxPoints.length === 0) return { min: 0, max: 0, avg: 0, uniformity: '0.00', underAvg: 0, interAvg: 0 };
+    const luxValues = sampleLuxPoints.map((p) => p.lux);
+    const min = Math.min(...luxValues);
+    const max = Math.max(...luxValues);
+    const avg = Math.round(luxValues.reduce((a, b) => a + b, 0) / luxValues.length);
+    const uniformity = avg > 0 ? (min / avg).toFixed(2) : '0.00';
+
+    const underPts = sampleLuxPoints.filter((p) => p.type === 'under_fixture');
+    const underAvg = underPts.length > 0 ? Math.round(underPts.reduce((a, b) => a + b.lux, 0) / underPts.length) : 0;
+
+    const interPts = sampleLuxPoints.filter((p) => p.type === 'mid_row_x' || p.type === 'mid_col_y' || p.type === 'quad_center');
+    const interAvg = interPts.length > 0 ? Math.round(interPts.reduce((a, b) => a + b.lux, 0) / interPts.length) : 0;
+
+    return { min, max, avg, uniformity, underAvg, interAvg };
+  }, [sampleLuxPoints]);
 
   // SVG Dimension Line Component for 2D View
   const renderDimensionLine = (
@@ -1007,6 +1201,7 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
         {/* Right: Feature Toggles & Fullscreen Button */}
         <div className="flex flex-wrap items-center gap-1.5 text-xs">
           
+          {/* Lux Badges Main Toggle */}
           <button
             type="button"
             onClick={() => setShowPointLux(!showPointLux)}
@@ -1018,8 +1213,40 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
             title="เปิด/ปิด การแสดงตัวเลขค่า Lux จริงในแต่ละจุดผัง"
           >
             <Gauge className="w-3 h-3" />
-            <span>ค่า Lux รายจุด</span>
+            <span>ค่า Lux ({sampleLuxPoints.length} จุด)</span>
           </button>
+
+          {/* Lux Density Selector: Surrounding All vs Key Points */}
+          {showPointLux && (
+            <button
+              type="button"
+              onClick={() => setLuxDensityMode(luxDensityMode === 'surrounding' ? 'key_points' : 'surrounding')}
+              className={`px-2 py-1 rounded-lg border text-[10px] font-bold transition flex items-center gap-1 cursor-pointer ${
+                luxDensityMode === 'surrounding'
+                  ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40'
+                  : 'bg-slate-800/90 text-slate-300 border-slate-700 hover:text-white'
+              }`}
+              title="สลับโหมด: แสดงค่า Lux ระหว่างโคมรอบตัวทุกทิศทาง หรือเฉพาะจุดหลัก"
+            >
+              <span>{luxDensityMode === 'surrounding' ? '🌐 รอบโคมทุกจุด' : '🎯 จุดหลัก'}</span>
+            </button>
+          )}
+
+          {/* 2D Inter-fixture Guide Lines Toggle */}
+          {viewMode === '2d' && (
+            <button
+              type="button"
+              onClick={() => setShowInterFixtureLines(!showInterFixtureLines)}
+              className={`px-2 py-1 rounded-lg border text-[10px] font-medium transition flex items-center gap-1 cursor-pointer ${
+                showInterFixtureLines
+                  ? 'bg-sky-500/20 text-sky-300 border-sky-500/40'
+                  : 'bg-slate-800/80 text-slate-400 border-slate-700 hover:text-slate-200'
+              }`}
+              title="เปิด/ปิด เส้นโยงโครงข่ายการกระจายแสงระหว่างโคม"
+            >
+              <span>เส้นโยงผัง</span>
+            </button>
+          )}
 
           <button
             type="button"
@@ -1074,6 +1301,42 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
         </div>
 
       </div>
+
+      {/* 🎯 Quick Downlight / Spotlight Beam Angle Switcher Sub-Bar (10°, 15°, 20°, 25°, 36°, 40°, 50°, 55°, 60°) */}
+      {(isDownlightOrSpot || onSelectBeamAngle) && (
+        <div className="px-3 py-2 bg-slate-900/95 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2 text-xs">
+          <div className="flex items-center gap-2">
+            <span className="text-amber-400 font-bold flex items-center gap-1 text-[11px]">
+              <Sun className="w-3.5 h-3.5 text-amber-400" />
+              <span>ปรับองศามุมโคมดาวน์ไลท์ (Beam Angle):</span>
+            </span>
+            <span className="px-2 py-0.5 rounded-md bg-amber-500 text-slate-950 font-mono font-black text-[11px]">
+              {numericBeamAngle}° {numericBeamAngle <= 20 ? 'Narrow Spot' : numericBeamAngle <= 36 ? 'Medium Spot/Flood' : 'Wide Flood'}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1 overflow-x-auto pb-0.5">
+            {[10, 15, 20, 25, 36, 40, 50, 55, 60].map((deg) => {
+              const isActive = numericBeamAngle === deg;
+              return (
+                <button
+                  key={`beam-deg-${deg}`}
+                  type="button"
+                  onClick={() => onSelectBeamAngle && onSelectBeamAngle(deg)}
+                  className={`px-2 py-0.5 rounded-md font-mono text-[11px] font-bold transition cursor-pointer ${
+                    isActive
+                      ? 'bg-amber-400 text-slate-950 shadow-xs'
+                      : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white border border-slate-700'
+                  }`}
+                  title={`เลือกมุมกระจายแสง ${deg}°`}
+                >
+                  {deg}°
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Main Interactive Stage Area */}
       <div 
@@ -1351,65 +1614,88 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
                 </g>
               )}
 
-              {/* 🌟 3D POINT-BY-POINT REAL-TIME LUX VALUE TAGS */}
+              {/* 🌟 3D POINT-BY-POINT REAL-TIME LUX VALUE TAGS (SURROUNDING & INTER-FIXTURE) */}
               {showPointLux && (
                 <g id="3d-lux-point-badges" className="select-none font-mono">
                   {sampleLuxPoints.map((pt) => {
                     const p = project3D(pt.x, pt.y, pt.z, 750, 440);
                     const isUnder = pt.type === 'under_fixture';
+                    const isInter = pt.type === 'mid_row_x' || pt.type === 'mid_col_y';
+                    const isQuad = pt.type === 'quad_center';
+                    const isPerim = pt.type === 'perimeter';
+
+                    const dotColor =
+                      dimmingPercent === 0
+                        ? '#475569'
+                        : isUnder
+                        ? '#f59e0b'
+                        : isInter
+                        ? '#38bdf8'
+                        : isQuad
+                        ? '#10b981'
+                        : isPerim
+                        ? '#a855f7'
+                        : '#94a3b8';
+
+                    const badgeW = pt.lux >= 1000 ? 46 : 42;
+                    const badgeH = 14;
+
+                    const statusBorder =
+                      dimmingPercent === 0
+                        ? '#334155'
+                        : pt.lux >= targetLux * 0.9
+                        ? '#10b981'
+                        : pt.lux >= targetLux * 0.5
+                        ? '#f59e0b'
+                        : '#f43f5e';
+
+                    const statusText =
+                      dimmingPercent === 0
+                        ? '#94a3b8'
+                        : pt.lux >= targetLux * 0.9
+                        ? '#34d399'
+                        : pt.lux >= targetLux * 0.5
+                        ? '#fbbf24'
+                        : '#fb7185';
 
                     return (
                       <g key={`lux-badge-3d-${pt.id}`} className="cursor-pointer group">
+                        {/* Base anchor dot on workplane surface */}
                         <circle
                           cx={p.px}
                           cy={p.py}
-                          r={isUnder ? "3.5" : "2"}
-                          fill={dimmingPercent === 0 ? '#475569' : '#38bdf8'}
+                          r={isUnder ? '3.5' : isInter || isQuad ? '2.5' : '2'}
+                          fill={dotColor}
                           stroke="#ffffff"
                           strokeWidth="0.8"
                         />
 
-                        <g transform={`translate(${p.px - 18}, ${p.py - 16})`}>
+                        {/* Lux Tag Pill */}
+                        <g transform={`translate(${p.px - badgeW / 2}, ${p.py - 18})`}>
                           <rect
                             x="0"
                             y="0"
-                            width={pt.lux >= 1000 ? "40" : "36"}
-                            height="13"
-                            rx="3"
+                            width={badgeW}
+                            height={badgeH}
+                            rx="3.5"
                             fill="#090d16"
-                            stroke={
-                              dimmingPercent === 0 
-                                ? '#334155' 
-                                : pt.lux >= targetLux * 0.9 
-                                ? '#10b981' 
-                                : pt.lux >= targetLux * 0.5 
-                                ? '#f59e0b' 
-                                : '#f43f5e'
-                            }
-                            strokeWidth="0.9"
-                            className="drop-shadow"
+                            stroke={statusBorder}
+                            strokeWidth={isUnder || isInter ? '1.2' : '0.9'}
+                            className="drop-shadow-md"
                           />
                           <text
-                            x={pt.lux >= 1000 ? "20" : "18"}
-                            y="9.5"
-                            fill={
-                              dimmingPercent === 0 
-                                ? '#94a3b8' 
-                                : pt.lux >= targetLux * 0.9 
-                                ? '#34d399' 
-                                : pt.lux >= targetLux * 0.5 
-                                ? '#fbbf24' 
-                                : '#fb7185'
-                            }
+                            x={badgeW / 2}
+                            y="10.5"
+                            fill={statusText}
                             fontSize="8"
                             fontWeight="bold"
                             textAnchor="middle"
                           >
-                            {pt.lux} lx
+                            {pt.icon} {pt.lux} lx
                           </text>
                         </g>
 
-                        <title>{`${pt.label} | ค่าความสว่าง: ${pt.lux} Lux (หรี่ไฟ ${dimmingPercent}%) | พิกัด (${pt.x.toFixed(1)}m, ${pt.y.toFixed(1)}m, Z=${pt.z.toFixed(2)}m)`}</title>
+                        <title>{`${pt.label} (${pt.subLabel}) | ค่าความสว่าง: ${pt.lux} Lux (เป้าหมาย ${targetLux} Lux - ${((pt.lux / Math.max(1, targetLux)) * 100).toFixed(0)}%) | พิกัด (${pt.x.toFixed(2)}m, ${pt.y.toFixed(2)}m, Z=${pt.z.toFixed(2)}m)`}</title>
                       </g>
                     );
                   })}
@@ -1687,11 +1973,56 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
                     </g>
                   )}
 
+                  {/* 🌐 Inter-fixture Photometric Guide Network (Dashed Lines between Fixtures) */}
+                  {showInterFixtureLines && showPointLux && (
+                    <g id="2d-inter-fixture-grid-lines" opacity="0.6">
+                      {/* Horizontal connecting lines along rows */}
+                      {Array.from({ length: fixtureRows }).map((_, r) => {
+                        const y = originY + (r + 0.5) * (spacingWidth * scale);
+                        const startX = originX + 0.5 * (spacingLength * scale);
+                        const endX = originX + (fixtureRows - 0.5) * (spacingLength * scale);
+                        return (
+                          <line
+                            key={`grid-line-h-${r}`}
+                            x1={startX}
+                            y1={y}
+                            x2={endX}
+                            y2={y}
+                            stroke="#38bdf8"
+                            strokeWidth="1"
+                            strokeDasharray="3,3"
+                          />
+                        );
+                      })}
+
+                      {/* Vertical connecting lines along columns */}
+                      {Array.from({ length: fixtureCols }).map((_, c) => {
+                        const x = originX + (c + 0.5) * (spacingLength * scale);
+                        const startY = originY + 0.5 * (spacingWidth * scale);
+                        const endY = originY + (fixtureCols - 0.5) * (spacingWidth * scale);
+                        return (
+                          <line
+                            key={`grid-line-v-${c}`}
+                            x1={x}
+                            y1={startY}
+                            x2={x}
+                            y2={endY}
+                            stroke="#38bdf8"
+                            strokeWidth="1"
+                            strokeDasharray="3,3"
+                          />
+                        );
+                      })}
+                    </g>
+                  )}
+
+                  {/* Ceiling Fixture Circles with Optical Cones */}
                   {Array.from({ length: fixtureRows }).flatMap((_, r) =>
                     Array.from({ length: fixtureCols }).map((_, c) => {
                       const cx = originX + (r + 0.5) * (spacingLength * scale);
                       const cy = originY + (c + 0.5) * (spacingWidth * scale);
-                      const radiusPx = (spacingLength * scale * (0.5 + 0.3 * dimFactor));
+                      const spreadRadiusM = Math.tan(((numericBeamAngle / 2) * Math.PI) / 180) * Math.max(0.5, roomHeight - workplaneHeight);
+                      const radiusPx = Math.max(10, spreadRadiusM * scale);
 
                       return (
                         <g key={`2d-fixture-${r}-${c}`}>
@@ -1739,58 +2070,104 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
                     })
                   )}
 
+                  {/* 🌟 2D REAL-TIME LUX VALUE TAGS (SURROUNDING & INTER-FIXTURE) */}
                   {showPointLux && (
                     <g id="2d-point-lux-values" className="select-none font-mono">
                       {sampleLuxPoints.map((pt) => {
                         const px = originX + pt.x * scale;
                         const py = originY + pt.y * scale;
 
+                        const isUnder = pt.type === 'under_fixture';
+                        const isInter = pt.type === 'mid_row_x' || pt.type === 'mid_col_y';
+                        const isQuad = pt.type === 'quad_center';
+                        const isPerim = pt.type === 'perimeter';
+
+                        const badgeW = pt.lux >= 1000 ? 44 : 38;
+                        const badgeH = 13;
+
+                        const statusBorder =
+                          dimmingPercent === 0
+                            ? '#334155'
+                            : isUnder
+                            ? '#f59e0b'
+                            : isInter
+                            ? '#38bdf8'
+                            : isQuad
+                            ? '#10b981'
+                            : isPerim
+                            ? '#a855f7'
+                            : pt.lux >= targetLux * 0.9
+                            ? '#10b981'
+                            : '#fb7185';
+
+                        const statusBg =
+                          dimmingPercent === 0
+                            ? '#0b0f19'
+                            : isUnder
+                            ? '#1c1305'
+                            : isInter
+                            ? '#041626'
+                            : isQuad
+                            ? '#031a12'
+                            : '#090d16';
+
+                        const statusText =
+                          dimmingPercent === 0
+                            ? '#94a3b8'
+                            : isUnder
+                            ? '#fde047'
+                            : isInter
+                            ? '#7dd3fc'
+                            : isQuad
+                            ? '#6ee7b7'
+                            : isPerim
+                            ? '#d8b4fe'
+                            : pt.lux >= targetLux * 0.9
+                            ? '#34d399'
+                            : '#fda4af';
+
+                        // Position offset based on point type to prevent visual collision
+                        let offsetY = -badgeH / 2;
+                        let offsetX = -badgeW / 2;
+                        if (isUnder) {
+                          offsetY = 9; // Below luminaire icon
+                        }
+
                         return (
-                          <g key={`2d-lux-pt-${pt.id}`} className="cursor-pointer">
+                          <g key={`2d-lux-pt-${pt.id}`} className="cursor-pointer group">
+                            {/* Anchor point marker */}
                             <circle
                               cx={px}
                               cy={py}
-                              r="2"
-                              fill="#38bdf8"
+                              r={isUnder ? '2.5' : isInter || isQuad ? '2' : '1.5'}
+                              fill={isUnder ? '#f59e0b' : isInter ? '#38bdf8' : isQuad ? '#10b981' : '#94a3b8'}
                             />
-                            <g transform={`translate(${px - 17}, ${py + 4})`}>
+
+                            <g transform={`translate(${px + offsetX}, ${py + offsetY})`}>
                               <rect
                                 x="0"
                                 y="0"
-                                width={pt.lux >= 1000 ? "38" : "34"}
-                                height="12"
-                                rx="2.5"
-                                fill="#070a12"
-                                stroke={
-                                  dimmingPercent === 0
-                                    ? '#334155'
-                                    : pt.lux >= targetLux * 0.9
-                                    ? '#10b981'
-                                    : pt.lux >= targetLux * 0.5
-                                    ? '#f59e0b'
-                                    : '#f43f5e'
-                                }
-                                strokeWidth="0.8"
+                                width={badgeW}
+                                height={badgeH}
+                                rx="3"
+                                fill={statusBg}
+                                stroke={statusBorder}
+                                strokeWidth={isUnder || isInter ? '1.1' : '0.8'}
+                                className="drop-shadow"
                               />
                               <text
-                                x={pt.lux >= 1000 ? "19" : "17"}
-                                y="9"
-                                fill={
-                                  dimmingPercent === 0
-                                    ? '#94a3b8'
-                                    : pt.lux >= targetLux * 0.9
-                                    ? '#34d399'
-                                    : pt.lux >= targetLux * 0.5
-                                    ? '#fbbf24'
-                                    : '#fb7185'
-                                }
-                                fontSize="7.5"
+                                x={badgeW / 2}
+                                y="9.5"
+                                fill={statusText}
+                                fontSize="7"
                                 fontWeight="bold"
                                 textAnchor="middle"
                               >
-                                {pt.lux} lx
+                                {pt.icon} {pt.lux}
                               </text>
                             </g>
+
+                            <title>{`${pt.label} (${pt.subLabel}) | ความสว่าง: ${pt.lux} Lux | พิกัด (${pt.x.toFixed(2)}m, ${pt.y.toFixed(2)}m)`}</title>
                           </g>
                         );
                       })}
@@ -2025,32 +2402,94 @@ export const LightingRoom3DVisualizer: React.FC<LightingRoom3DVisualizerProps> =
 
       </div>
 
-      {/* Visualizer Bottom Detail Legend Bar & Lux Color Scale */}
-      <div className="p-3 bg-slate-900 border-t border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs">
+      {/* Visualizer Bottom Detail Legend Bar & Lux Photometric Analytics */}
+      <div className="p-3 bg-slate-900 border-t border-slate-800 flex flex-col gap-2.5 text-xs">
         
-        {/* Left: Lux Color Meaning Scale */}
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-[11px] text-slate-400 font-bold">แถบสีระดับ Lux:</span>
-          <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800 text-[10px] font-mono font-bold">
-            🟢 สว่างตามเป้าหมาย (≥90%)
-          </span>
-          <span className="px-2 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-800 text-[10px] font-mono font-bold">
-            🟡 ปานกลาง (55-89%)
-          </span>
-          <span className="px-2 py-0.5 rounded bg-rose-950 text-rose-300 border border-rose-800 text-[10px] font-mono font-bold">
-            🔴 ต่ำ/ขอบมุม (&lt;55%)
-          </span>
+        {/* Top row: Point Type Icon Legend & Color Code */}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          
+          <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+            <span className="text-slate-400 font-bold mr-1">สัญลักษณ์จุด Lux:</span>
+            <span className="px-2 py-0.5 rounded bg-amber-950/80 text-amber-300 border border-amber-800/80 font-mono font-semibold">
+              ⚡ ใต้โคม
+            </span>
+            <span className="px-2 py-0.5 rounded bg-sky-950/80 text-sky-300 border border-sky-800/80 font-mono font-semibold">
+              ↔/↕ ระหว่างโคมรอบตัว
+            </span>
+            <span className="px-2 py-0.5 rounded bg-emerald-950/80 text-emerald-300 border border-emerald-800/80 font-mono font-semibold">
+              ✛ กึ่งกลาง 4 โคม
+            </span>
+            <span className="px-2 py-0.5 rounded bg-purple-950/80 text-purple-300 border border-purple-800/80 font-mono font-semibold">
+              ▫ ริมผนังรอบโคม
+            </span>
+            <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700 font-mono font-semibold">
+              ◤ มุมห้อง
+            </span>
+          </div>
+
+          {/* Color Meaning Scale */}
+          <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
+            <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800 font-mono font-bold">
+              🟢 ผ่านเกณฑ์ (≥90%)
+            </span>
+            <span className="px-2 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-800 font-mono font-bold">
+              🟡 ปานกลาง (55-89%)
+            </span>
+            <span className="px-2 py-0.5 rounded bg-rose-950 text-rose-300 border border-rose-800 font-mono font-bold">
+              🔴 ชายขอบ (&lt;55%)
+            </span>
+          </div>
+
         </div>
 
-        {/* Right: Actual Lux & Target Badge */}
-        <div className="flex items-center gap-2">
-          <span className="text-slate-400">ความสว่างหรี่จริง:</span>
-          <span className="px-2.5 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-800 font-mono font-black text-sm">
-            {currentEffectiveLux} Lux
-          </span>
-          <span className="text-[10px] text-slate-500">
-            (100% สเปก = {calculatedLux} Lux)
-          </span>
+        {/* Bottom row: Photometric Stats Bar (Min, Max, Avg, Uniformity Ratio) */}
+        <div className="px-3 py-2 rounded-xl bg-slate-950/70 border border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs">
+          
+          <div className="flex flex-wrap items-center gap-4 text-[11px] font-mono">
+            <div className="flex items-center gap-1.5">
+              <span className="text-slate-400 font-sans">ความสม่ำเสมอแสง (Uniformity U₀):</span>
+              <span className={`px-2 py-0.5 rounded font-bold ${
+                Number(luxStats.uniformity) >= 0.6
+                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                  : Number(luxStats.uniformity) >= 0.4
+                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                  : 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
+              }`}>
+                {luxStats.uniformity} {Number(luxStats.uniformity) >= 0.6 ? '(ดีเยี่ยม)' : Number(luxStats.uniformity) >= 0.4 ? '(มาตรฐาน)' : '(ความต่างสูง)'}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-1 text-slate-300">
+              <span className="text-slate-500">Min:</span>
+              <span className="font-bold text-rose-400">{luxStats.min} lx</span>
+            </div>
+
+            <div className="flex items-center gap-1 text-slate-300">
+              <span className="text-slate-500">Avg:</span>
+              <span className="font-bold text-emerald-400">{luxStats.avg} lx</span>
+            </div>
+
+            <div className="flex items-center gap-1 text-slate-300">
+              <span className="text-slate-500">Max (ใต้โคม):</span>
+              <span className="font-bold text-amber-400">{luxStats.max} lx</span>
+            </div>
+
+            {luxStats.interAvg > 0 && (
+              <div className="hidden sm:flex items-center gap-1 text-slate-300">
+                <span className="text-slate-500">เฉลี่ยระหว่างโคม:</span>
+                <span className="font-bold text-sky-400">{luxStats.interAvg} lx</span>
+              </div>
+            )}
+          </div>
+
+          {/* Current Dimmed Effective Lux */}
+          <div className="flex items-center gap-2">
+            <span className="text-slate-400 text-[11px]">ค่าเฉลี่ยห้อง (หรี่ {dimmingPercent}%):</span>
+            <span className="px-2.5 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-800 font-mono font-black text-xs">
+              {currentEffectiveLux} Lux
+            </span>
+          </div>
+
         </div>
 
       </div>

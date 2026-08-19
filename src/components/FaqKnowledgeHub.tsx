@@ -134,11 +134,12 @@ export const FaqKnowledgeHub: React.FC<FaqKnowledgeHubProps> = ({
   const [targetLux, setTargetLux] = useState<number>(500); // Lux
   
   // Luminaire Type & IES File Integration State
-  const [selectedLuminaireType, setSelectedLuminaireType] = useState<string>('panel_60x60');
-  const [efficacyLmPerWatt, setEfficacyLmPerWatt] = useState<number>(110); // lm/W
-  const [fixtureWatts, setFixtureWatts] = useState<number>(36); // Watts per fixture
+  const [selectedLuminaireType, setSelectedLuminaireType] = useState<string>('downlight_recessed');
+  const [downlightBeamAngle, setDownlightBeamAngle] = useState<number>(36); // 10, 15, 20, 25, 36, 40, 50, 55, 60
+  const [efficacyLmPerWatt, setEfficacyLmPerWatt] = useState<number>(100); // lm/W
+  const [fixtureWatts, setFixtureWatts] = useState<number>(15); // Watts per fixture
   const [customFixtureLumen, setCustomFixtureLumen] = useState<number>(0); // 0 = auto calculate from watts * efficacy
-  const [ufCoeff, setUfCoeff] = useState<number>(0.70); // Utilization factor
+  const [ufCoeff, setUfCoeff] = useState<number>(0.60); // Utilization factor
   const [mfCoeff, setMfCoeff] = useState<number>(0.80); // Maintenance factor
 
   // AUTO vs MANUAL fixture count mode
@@ -444,6 +445,19 @@ export const FaqKnowledgeHub: React.FC<FaqKnowledgeHubProps> = ({
     }, 2000);
   };
 
+  // Downlight Beam Angles (10, 15, 20, 25, 36, 40, 50, 55, 60)
+  const DOWNLIGHT_BEAM_ANGLES = [
+    { angle: 10, label: '10°', type: 'Narrow Spot', desc: 'ลำแสงแคบเข้มข้นสูง สำหรับส่องเน้นรูปภาพ/ประติมากรรม/จุดเด่น (High Peak Lux)', uf: 0.50 },
+    { angle: 15, label: '15°', type: 'Spot', desc: 'ส่องเน้นวัตถุ สินค้า หรือกรอบรูปติดผนังให้โดดเด่นสะดุดตา', uf: 0.52 },
+    { angle: 20, label: '20°', type: 'Spot Medium', desc: 'ส่องเน้นเฉพาะจุดในระยะเพดานสูง หรือส่องเน้นป้ายสัญลักษณ์', uf: 0.54 },
+    { angle: 25, label: '25°', type: 'Medium Spot', desc: 'ส่องเน้นเคาน์เตอร์ โต๊ะทานข้าว หรือชั้นวางสินค้า', uf: 0.56 },
+    { angle: 36, label: '36°', type: 'Medium Flood', desc: 'มุมมาตรฐานสถาปัตยกรรม แสงนุ่มเน้นจุด ไม่แยงตา (มุมยอดนิยม)', uf: 0.58 },
+    { angle: 40, label: '40°', type: 'Flood', desc: 'ส่องสว่างทั่วไปกึ่งเน้นจุด สบายตา สร้างมิติแสงเงาคมชัด', uf: 0.60 },
+    { angle: 50, label: '50°', type: 'Wide Flood', desc: 'กระจายแสงสม่ำเสมอ ลดความเข้มของเงามืดรอบบริเวณ', uf: 0.62 },
+    { angle: 55, label: '55°', type: 'Wide Flood Extra', desc: 'มุมกว้างสว่างครอบคลุม เหมาะกับทางเดินและห้องนอน', uf: 0.64 },
+    { angle: 60, label: '60°', type: 'Extra Wide Flood', desc: 'มุมกว้างมาตรฐาน ส่องสว่างทั้งห้องได้อย่างทั่วถึงและเนียนตา', uf: 0.65 },
+  ] as const;
+
   // Calculations & Engineering Formulas
   // Luminaire Types Specification Table
   const LUMINAIRE_TYPES: Record<string, {
@@ -469,15 +483,15 @@ export const FaqKnowledgeHub: React.FC<FaqKnowledgeHubProps> = ({
       desc: 'กระจายแสงสม่ำเสมอ ลดแสงแยงตา UGR < 19 สบายตาตลอดวัน'
     },
     'downlight_recessed': {
-      name: 'โคมดาวน์ไลท์ Recessed Downlight (COB/SMD 60°)',
+      name: 'โคมดาวน์ไลท์ Recessed Downlight (ปรับมุม 10°–60°)',
       category: 'ที่พักอาศัย / โรงแรม / ร้านค้า',
       defaultWatts: 15,
       defaultLmPerW: 100,
-      beamAngle: '60° (มุมปานกลาง แสงเน้นจุดสว่างนุ่มนวล)',
-      uf: 0.60,
+      beamAngle: `${downlightBeamAngle}° (เลือกได้ 10°, 15°, 20°, 25°, 36°, 40°, 50°, 55°, 60°)`,
+      uf: DOWNLIGHT_BEAM_ANGLES.find(b => b.angle === downlightBeamAngle)?.uf || 0.60,
       mf: 0.80,
       icon: '🔘',
-      desc: 'สำหรับฝังฝ้าเพดาน ให้แสงสว่างทั่วไปและเน้นความสวยงามสถาปัตยกรรม'
+      desc: 'สำหรับฝังฝ้าเพดาน สามารถเลือกมุมกระจายแสง 10° ถึง 60° ตามการใช้งาน'
     },
     'spotlight_track': {
       name: 'โคมสปอตไลท์ / แทร็กไลท์ Track Spotlight (24°–36°)',
@@ -1787,11 +1801,112 @@ export const FaqKnowledgeHub: React.FC<FaqKnowledgeHubProps> = ({
                               {lum.name.split('(')[0]}
                             </div>
                             <div className={`text-[9px] mt-0.5 line-clamp-1 ${isSelected ? 'text-slate-900 font-medium' : 'text-slate-400'}`}>
-                              {lum.beamAngle}
+                              {typeKey === 'downlight_recessed' ? `${downlightBeamAngle}° (ปรับได้)` : lum.beamAngle}
                             </div>
                           </button>
                         );
                       })}
+                    </div>
+
+                    {/* 🎯 DOWNLIGHT BEAM ANGLE SELECTOR (10, 15, 20, 25, 36, 40, 50, 55, 60) */}
+                    <div className="mt-3 p-3.5 rounded-xl bg-gradient-to-br from-slate-950 via-slate-900 to-amber-950/40 border border-amber-500/40 space-y-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2">
+                        <div className="flex items-center gap-2">
+                          <span className="p-1.5 rounded-lg bg-amber-500 text-slate-950 font-bold">
+                            <Sun className="w-4 h-4" />
+                          </span>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-amber-400 text-xs">
+                                🎯 เลือกองศามุมโคม Downlight (Beam Angle):
+                              </span>
+                              <span className="px-2.5 py-0.5 rounded-full bg-amber-500 text-slate-950 font-mono font-black text-xs shadow-xs">
+                                {downlightBeamAngle}°
+                              </span>
+                            </div>
+                            <p className="text-[10px] text-slate-400">
+                              เลือกมุมองศากระจายแสง: 10°, 15°, 20°, 25°, 36°, 40°, 50°, 55°, 60°
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Selected angle description badge */}
+                        <div className="text-right">
+                          <span className="text-[11px] font-bold text-amber-300">
+                            {DOWNLIGHT_BEAM_ANGLES.find(b => b.angle === downlightBeamAngle)?.type}
+                          </span>
+                          <div className="text-[10px] text-slate-400 font-mono">
+                            รัศมีวงแสงที่พื้น: {(effectiveHeight * Math.tan(((downlightBeamAngle / 2) * Math.PI) / 180)).toFixed(2)} ม. (Ø {(2 * effectiveHeight * Math.tan(((downlightBeamAngle / 2) * Math.PI) / 180)).toFixed(2)} ม.)
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* 9 Angle Quick Selector Buttons */}
+                      <div className="grid grid-cols-3 sm:grid-cols-9 gap-1.5">
+                        {DOWNLIGHT_BEAM_ANGLES.map((item) => {
+                          const isAngleSelected = downlightBeamAngle === item.angle;
+                          return (
+                            <button
+                              key={`dl-angle-btn-${item.angle}`}
+                              type="button"
+                              onClick={() => {
+                                setDownlightBeamAngle(item.angle);
+                                if (selectedLuminaireType === 'downlight_recessed' || selectedLuminaireType === 'spotlight_track') {
+                                  setUfCoeff(item.uf);
+                                }
+                              }}
+                              className={`py-2 px-1 rounded-xl text-center border transition flex flex-col items-center justify-center cursor-pointer ${
+                                isAngleSelected
+                                  ? 'bg-amber-500 text-slate-950 border-amber-400 font-black shadow-md shadow-amber-500/20 scale-102'
+                                  : 'bg-slate-800/90 text-slate-300 border-slate-700 hover:bg-slate-700 hover:text-white'
+                              }`}
+                            >
+                              <span className="font-mono text-xs sm:text-sm font-black">{item.label}</span>
+                              <span className={`text-[9px] mt-0.5 whitespace-nowrap line-clamp-1 ${
+                                isAngleSelected ? 'text-slate-950 font-bold' : 'text-slate-400'
+                              }`}>
+                                {item.angle <= 20 ? 'Spot' : item.angle <= 36 ? 'Medium' : 'Wide'}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {/* Angle Slider Bar & Context Explanation */}
+                      <div className="p-2.5 rounded-lg bg-slate-950/80 border border-slate-800 space-y-2">
+                        <div className="flex flex-wrap items-center justify-between gap-1 text-[11px]">
+                          <span className="text-slate-300">
+                            💡 <strong>ลักษณะการส่อง:</strong> {DOWNLIGHT_BEAM_ANGLES.find(b => b.angle === downlightBeamAngle)?.desc}
+                          </span>
+                          <span className="text-amber-400 font-mono font-bold">
+                            UF = {DOWNLIGHT_BEAM_ANGLES.find(b => b.angle === downlightBeamAngle)?.uf.toFixed(2)}
+                          </span>
+                        </div>
+
+                        {/* Slider connecting the 9 discrete angles */}
+                        <div className="flex items-center gap-2 pt-1">
+                          <span className="text-[10px] font-mono text-slate-400 font-bold">10° (แคบ/Spot)</span>
+                          <input
+                            type="range"
+                            min={0}
+                            max={DOWNLIGHT_BEAM_ANGLES.length - 1}
+                            step={1}
+                            value={DOWNLIGHT_BEAM_ANGLES.findIndex(b => b.angle === downlightBeamAngle) !== -1 ? DOWNLIGHT_BEAM_ANGLES.findIndex(b => b.angle === downlightBeamAngle) : 4}
+                            onChange={(e) => {
+                              const idx = Number(e.target.value);
+                              const item = DOWNLIGHT_BEAM_ANGLES[idx];
+                              if (item) {
+                                setDownlightBeamAngle(item.angle);
+                                if (selectedLuminaireType === 'downlight_recessed' || selectedLuminaireType === 'spotlight_track') {
+                                  setUfCoeff(item.uf);
+                                }
+                              }
+                            }}
+                            className="flex-1 accent-amber-500 cursor-pointer h-2 bg-slate-800 rounded-lg"
+                          />
+                          <span className="text-[10px] font-mono text-amber-400 font-bold">60° (กว้าง/Flood)</span>
+                        </div>
+                      </div>
                     </div>
 
                     {/* IES Photometric File Reader Section */}
@@ -2413,6 +2528,10 @@ export const FaqKnowledgeHub: React.FC<FaqKnowledgeHubProps> = ({
                     beamAngleText={
                       selectedLuminaireType === 'custom_ies' && parsedIesData
                         ? parsedIesData.beamAngle
+                        : selectedLuminaireType === 'downlight_recessed'
+                        ? `${downlightBeamAngle}° (Downlight ${DOWNLIGHT_BEAM_ANGLES.find(b => b.angle === downlightBeamAngle)?.type || ''})`
+                        : selectedLuminaireType === 'spotlight_track'
+                        ? `${downlightBeamAngle}° (Spotlight ${DOWNLIGHT_BEAM_ANGLES.find(b => b.angle === downlightBeamAngle)?.type || ''})`
                         : (LUMINAIRE_TYPES[selectedLuminaireType]?.beamAngle || '110°')
                     }
                     luminaireName={
@@ -2421,6 +2540,15 @@ export const FaqKnowledgeHub: React.FC<FaqKnowledgeHubProps> = ({
                         : (LUMINAIRE_TYPES[selectedLuminaireType]?.name || 'โคมไฟส่องสว่าง')
                     }
                     luminaireIcon={LUMINAIRE_TYPES[selectedLuminaireType]?.icon || '💡'}
+                    selectedBeamAngle={downlightBeamAngle}
+                    onSelectBeamAngle={(angle) => {
+                      setDownlightBeamAngle(angle);
+                      const item = DOWNLIGHT_BEAM_ANGLES.find(b => b.angle === angle);
+                      if (item && (selectedLuminaireType === 'downlight_recessed' || selectedLuminaireType === 'spotlight_track')) {
+                        setUfCoeff(item.uf);
+                      }
+                    }}
+                    isDownlightOrSpot={selectedLuminaireType === 'downlight_recessed' || selectedLuminaireType === 'spotlight_track'}
                   />
 
                 </div>
