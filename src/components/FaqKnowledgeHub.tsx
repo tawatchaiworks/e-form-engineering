@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { FaqItem, FaqCategory, EngineerInquiry, StaffMember } from '../types';
 import { INITIAL_FAQS } from '../utils/initialFaqs';
+import { LightingRoom3DVisualizer } from './LightingRoom3DVisualizer';
 
 interface FaqKnowledgeHubProps {
   faqs?: FaqItem[];
@@ -2395,130 +2396,32 @@ export const FaqKnowledgeHub: React.FC<FaqKnowledgeHubProps> = ({
 
                   </div>
 
-                  {/* 2D Ceiling Layout Preview Visualizer */}
-                  <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 text-white space-y-2">
-                    <div className="flex items-center justify-between text-[11px] font-bold text-slate-300">
-                      <span className="flex items-center gap-1.5 text-amber-400">
-                        <LayoutGrid className="w-3.5 h-3.5" />
-                        ผังจำลองตำแหน่งโคมบนฝ้าเพดาน (2D Ceiling Plan)
-                      </span>
-                      <span className="text-[10px] text-slate-500 font-mono">
-                        {effectiveCols} × {effectiveRows} = {gridFixtureCount} โคม
-                      </span>
-                    </div>
-
-                    {/* SVG Top-Down View */}
-                    <div className="relative w-full h-40 bg-slate-900 rounded-xl border border-slate-800 overflow-hidden flex items-center justify-center p-3">
-                      <svg 
-                        viewBox={`0 0 ${roomLength * 20 + 40} ${roomWidth * 20 + 40}`} 
-                        className="w-full h-full max-h-36 drop-shadow-md"
-                      >
-                        {/* Room Perimeter */}
-                        <rect
-                          x="20"
-                          y="20"
-                          width={roomLength * 20}
-                          height={roomWidth * 20}
-                          fill="#0f172a"
-                          stroke="#475569"
-                          strokeWidth="2"
-                          rx="4"
-                        />
-
-                        {/* Grid Guides */}
-                        {Array.from({ length: effectiveRows }).map((_, rIdx) => {
-                          const cx = 20 + (rIdx + 0.5) * (spacingLength * 20);
-                          return (
-                            <line
-                              key={`v-${rIdx}`}
-                              x1={cx}
-                              y1="20"
-                              x2={cx}
-                              y2={20 + roomWidth * 20}
-                              stroke="#1e293b"
-                              strokeDasharray="2,2"
-                            />
-                          );
-                        })}
-
-                        {Array.from({ length: effectiveCols }).map((_, cIdx) => {
-                          const cy = 20 + (cIdx + 0.5) * (spacingWidth * 20);
-                          return (
-                            <line
-                              key={`h-${cIdx}`}
-                              x1="20"
-                              y1={cy}
-                              x2={20 + roomLength * 20}
-                              y2={cy}
-                              stroke="#1e293b"
-                              strokeDasharray="2,2"
-                            />
-                          );
-                        })}
-
-                        {/* Fixture Nodes (Luminaires) */}
-                        {Array.from({ length: effectiveRows }).flatMap((_, rIdx) =>
-                          Array.from({ length: effectiveCols }).map((_, cIdx) => {
-                            const cx = 20 + (rIdx + 0.5) * (spacingLength * 20);
-                            const cy = 20 + (cIdx + 0.5) * (spacingWidth * 20);
-                            return (
-                              <g key={`fixture-${rIdx}-${cIdx}`}>
-                                {/* Glow Circle */}
-                                <circle
-                                  cx={cx}
-                                  cy={cy}
-                                  r={Math.min(14, spacingWidth * 4)}
-                                  fill="rgba(245, 158, 11, 0.15)"
-                                />
-                                {/* Fixture Core */}
-                                <circle
-                                  cx={cx}
-                                  cy={cy}
-                                  r="4.5"
-                                  fill="#f59e0b"
-                                  stroke="#ffffff"
-                                  strokeWidth="1.5"
-                                />
-                              </g>
-                            );
-                          })
-                        )}
-
-                        {/* Length Dimension Label */}
-                        <text
-                          x={20 + (roomLength * 20) / 2}
-                          y="14"
-                          fill="#94a3b8"
-                          fontSize="9"
-                          textAnchor="middle"
-                          fontFamily="monospace"
-                        >
-                          ยาว L = {roomLength}m
-                        </text>
-
-                        {/* Width Dimension Label */}
-                        <text
-                          x="10"
-                          y={20 + (roomWidth * 20) / 2}
-                          fill="#94a3b8"
-                          fontSize="9"
-                          textAnchor="middle"
-                          fontFamily="monospace"
-                          transform={`rotate(-90 10 ${20 + (roomWidth * 20) / 2})`}
-                        >
-                          กว้าง W = {roomWidth}m
-                        </text>
-                      </svg>
-                    </div>
-
-                    <div className="flex items-center justify-between text-[10px] text-slate-400 px-1">
-                      <span className="flex items-center gap-1">
-                        <span className="w-2 h-2 rounded-full bg-amber-500 inline-block"></span>
-                        ตำแหน่งจุดติดตั้งโคมไฟ ({effectiveCols} × {effectiveRows})
-                      </span>
-                      <span>H_โคม = {roomHeight}m (ระยะระนาบงาน = {effectiveHeight.toFixed(2)}m)</span>
-                    </div>
-                  </div>
+                  {/* 3D & 2D Interactive Lighting Room Simulation with Furniture & Dimensions */}
+                  <LightingRoom3DVisualizer
+                    roomLength={roomLength}
+                    roomWidth={roomWidth}
+                    roomHeight={roomHeight}
+                    workplaneHeight={workplaneHeight}
+                    selectedRoomType={roomPreset}
+                    fixtureRows={effectiveRows}
+                    fixtureCols={effectiveCols}
+                    fixtureWatts={fixtureWatts}
+                    fixtureLumens={fixtureLumens}
+                    efficacyLmPerWatt={efficacyLmPerWatt}
+                    calculatedLux={actualCalculatedLux}
+                    targetLux={targetLux}
+                    beamAngleText={
+                      selectedLuminaireType === 'custom_ies' && parsedIesData
+                        ? parsedIesData.beamAngle
+                        : (LUMINAIRE_TYPES[selectedLuminaireType]?.beamAngle || '110°')
+                    }
+                    luminaireName={
+                      selectedLuminaireType === 'custom_ies' && parsedIesData
+                        ? parsedIesData.luminaireName
+                        : (LUMINAIRE_TYPES[selectedLuminaireType]?.name || 'โคมไฟส่องสว่าง')
+                    }
+                    luminaireIcon={LUMINAIRE_TYPES[selectedLuminaireType]?.icon || '💡'}
+                  />
 
                 </div>
 
