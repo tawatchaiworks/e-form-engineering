@@ -6,7 +6,8 @@ import {
   MessageSquare, Send, ThumbsUp, Tag, Scissors,
   Waves, Trees, Cable, Cpu, Plus, Edit3, Trash2,
   Calculator, Check, X, ArrowRight, Share2, Copy,
-  UserCheck, Clock, ShieldCheck
+  UserCheck, Clock, ShieldCheck, Bot, Globe,
+  Loader2, RefreshCw, BookmarkPlus, ExternalLink
 } from 'lucide-react';
 import { FaqItem, FaqCategory, EngineerInquiry, StaffMember } from '../types';
 import { INITIAL_FAQS } from '../utils/initialFaqs';
@@ -35,6 +36,34 @@ const CATEGORY_META: Record<FaqCategory, { label: string; icon: any }> = {
   general: { label: 'ความรู้เทคนิคไฟฟ้าทั่วไป', icon: BookOpen },
 };
 
+interface ExternalWebLink {
+  title: string;
+  url: string;
+  description?: string;
+}
+
+interface GoogleSearchLinks {
+  mainSearchUrl: string;
+  diagramSearchUrl: string;
+  datasheetSearchUrl: string;
+  searchedQueries: string[];
+  webSources: ExternalWebLink[];
+}
+
+interface AiSearchAnswer {
+  summary: string;
+  category?: FaqCategory;
+  categoryLabel?: string;
+  steps?: string[];
+  technicalTips?: string;
+  commonCauses?: string[];
+  tags?: string[];
+  internalMatchFound?: boolean;
+  sources?: string[];
+  externalWebSources?: ExternalWebLink[];
+  googleLinks?: GoogleSearchLinks;
+}
+
 export const FaqKnowledgeHub: React.FC<FaqKnowledgeHubProps> = ({
   faqs = [],
   inquiries = [],
@@ -51,10 +80,18 @@ export const FaqKnowledgeHub: React.FC<FaqKnowledgeHubProps> = ({
 
   const [activeTab, setActiveTab] = useState<'faqs' | 'candidates' | 'calculators'>('faqs');
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchMode, setSearchMode] = useState<'all' | 'internal' | 'ai'>('all');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [expandedId, setExpandedId] = useState<string | null>(displayFaqs[0]?.id || 'faq-psu-1');
   const [helpfulVotes, setHelpfulVotes] = useState<Record<string, boolean>>({});
   const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  // AI Search & Answer States
+  const [isAiSearching, setIsAiSearching] = useState(false);
+  const [aiResult, setAiResult] = useState<AiSearchAnswer | null>(null);
+  const [aiSearchedQuery, setAiSearchedQuery] = useState('');
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [aiCopied, setAiCopied] = useState(false);
 
   // Add / Edit FAQ Modal state
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -140,7 +177,89 @@ export const FaqKnowledgeHub: React.FC<FaqKnowledgeHubProps> = ({
     setTimeout(() => setCopiedId(null), 2500);
   };
 
-  // Open modal to add new FAQ
+  // 🤖 Trigger Comprehensive Search & AI Answering
+  const handlePerformSearch = async (forcedQuery?: string) => {
+    const queryToSearch = (forcedQuery !== undefined ? forcedQuery : searchQuery).trim();
+    if (!queryToSearch) {
+      alert('กรุณากรอกคำค้นหาหรือคำถามทางเทคนิค');
+      return;
+    }
+
+    // Set search query in state if forced
+    if (forcedQuery !== undefined) {
+      setSearchQuery(forcedQuery);
+    }
+
+    setActiveTab('faqs');
+    setAiSearchedQuery(queryToSearch);
+    setIsAiSearching(true);
+    setAiError(null);
+    setAiResult(null);
+
+    try {
+      // Package internal FAQs to provide context to Gemini
+      const internalContext = displayFaqs.map(f => ({
+        category: f.category,
+        question: f.question,
+        summary: f.summary,
+        steps: f.steps,
+        technicalTips: f.technicalTips,
+        tags: f.tags,
+      }));
+
+      const res = await fetch('/api/ai-search-faq', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: queryToSearch,
+          internalFaqsContext: internalContext,
+        }),
+      });
+
+      const json = await res.json();
+      if (res.ok && json.success) {
+        setAiResult(json.data || {
+          summary: json.answer || json.summary || 'ไม่พบข้อมูลสรุป',
+          steps: json.steps || [],
+          technicalTips: json.precautions || '',
+          sources: json.sources || [],
+        });
+      } else {
+        setAiError(json.error || 'ไม่สามารถติดต่อระบบ AI ได้ชั่วคราว');
+      }
+    } catch (err: any) {
+      console.error('Error invoking AI FAQ search:', err);
+      setAiError('เกิดข้อผิดพลาดในการเชื่อมต่อเครือข่าย โปรดลองอีกครั้ง');
+    } finally {
+      setIsAiSearching(false);
+    }
+  };
+
+  // 📋 Copy AI Answer
+  const handleCopyAiAnswer = () => {
+    if (!aiResult) return;
+    const textToCopy = `🤖 [LUMEN-AI Technical Assistant: ผลการค้นหา "${aiSearchedQuery}"]\n\n💡 สรุปคำตอบ:\n${aiResult.summary}\n\n${aiResult.steps && aiResult.steps.length > 0 ? `📋 ขั้นตอน/วิธีคำนวณ:\n${aiResult.steps.join('\n')}\n\n` : ''}${aiResult.technicalTips ? `⚠️ ข้อควรระวัง:\n${aiResult.technicalTips}\n\n` : ''}📚 แหล่งอ้างอิง: ${(aiResult.sources || ['LUMENCRAFT Technical Standard']).join(', ')}`;
+    navigator.clipboard.writeText(textToCopy);
+    setAiCopied(true);
+    setTimeout(() => setAiCopied(false), 2500);
+  };
+
+  // ➕ Convert AI Answer to New FAQ with 1-Click
+  const handleSaveAiAnswerAsFaq = () => {
+    if (!aiResult) return;
+    setEditingFaq(null);
+    setFaqCategory(aiResult.category || 'switching_power');
+    setFaqQuestion(aiSearchedQuery || 'คำถามเทคนิควิศวกรรมไฟฟ้า');
+    setFaqSummary(aiResult.summary || '');
+    setFaqStepsText(aiResult.steps ? aiResult.steps.join('\n') : '');
+    setFaqTechnicalTips(aiResult.technicalTips || '');
+    setFaqCommonCausesText(aiResult.commonCauses ? aiResult.commonCauses.join('\n') : '');
+    setFaqTagsText(aiResult.tags ? aiResult.tags.join(', ') : 'AI Assistant, วิศวกรรมไฟฟ้า, LUMENCRAFT');
+    setFaqAuthorName('LUMEN-AI & ฝ่ายวิศวกรรม');
+    setIsEditModalOpen(true);
+  };
+
+  // Open modal to add new FAQ manually
   const handleOpenAddModal = () => {
     setEditingFaq(null);
     setFaqCategory('switching_power');
@@ -278,10 +397,20 @@ export const FaqKnowledgeHub: React.FC<FaqKnowledgeHubProps> = ({
   // Inquiries for FAQ candidates
   const faqCandidates = inquiries.filter(inq => inq.forFaq || inq.category);
 
+  // Quick suggestion chips
+  const quickSearchPrompts = [
+    { label: '⚡ หม้อแปลง 24V สำหรับไฟเส้น 15m', query: 'การเลือกขนาดวัตต์หม้อแปลง 24V สำหรับไฟเส้นยาว 15 เมตร' },
+    { label: '📏 ขนาดสายไฟ 24V ระยะ 25m ไม่ให้ดรอป', query: 'สายไฟ 24V ระยะทาง 25 เมตร โหลด 100W ต้องใช้ขนาดสายกี่ sq.mm.' },
+    { label: '🌊 วิธีต่อสายไฟใต้น้ำ IP68 ไม่ให้รั่ว', query: 'การต่อสายไฟใต้น้ำในสระว่ายน้ำระบบเกลือไม่ให้น้ำซึมเข้า' },
+    { label: '✂️ ตัดต่อ Neonflex ดัดโค้งมุมฉาก', query: 'การตัดต่อ Neonflex และรัศมีการดัดโค้งไม่ให้ขาด' },
+    { label: '🎛️ DALI Address หลุดบ่อยเกิดจากอะไร', query: 'ปัญหาโคม DALI Address หลุดบ่อย และการตรวจสอบแรงดัน Bus' },
+    { label: '🌳 โคมฝังพื้นในสวนน้ำขังแก้ยังไง', query: 'วิธีทำชั้นระบายน้ำโคมไฟฝังพื้นในสวนไม่ให้น้ำท่วมขัง' },
+  ];
+
   return (
     <div className="max-w-7xl mx-auto space-y-6 pb-16">
       
-      {/* Top Banner */}
+      {/* Top Banner with Search Box & AI Assistant Search */}
       <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-indigo-950 text-white rounded-2xl p-6 sm:p-8 shadow-md border border-slate-800 relative overflow-hidden">
         <div className="absolute right-0 top-0 translate-x-10 -translate-y-10 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none"></div>
         
@@ -290,10 +419,10 @@ export const FaqKnowledgeHub: React.FC<FaqKnowledgeHubProps> = ({
             <div className="flex items-center space-x-2">
               <span className="px-2.5 py-0.5 rounded-full bg-amber-500 text-slate-950 font-black text-[11px] shadow-xs flex items-center gap-1">
                 <Sparkles className="w-3.5 h-3.5" />
-                Technical Engineering Knowledge Base
+                AI-Powered Engineering Knowledge Hub
               </span>
               <span className="text-xs text-slate-300">
-                คู่มือเทคนิคไฟฟ้าแสงสว่าง: หม้อแปลง, สายไฟ 24V, การตัดต่อไฟเส้น, งานใต้น้ำ, และสวน
+                ค้นหาข้อมูลทั้งภายในองค์กร และค้นหาภายนอกด้วย AI วิศวกรรมไฟฟ้า
               </span>
             </div>
 
@@ -312,46 +441,343 @@ export const FaqKnowledgeHub: React.FC<FaqKnowledgeHubProps> = ({
             <div>
               <h1 className="text-2xl sm:text-3xl font-extrabold text-white flex items-center gap-3">
                 <HelpCircle className="w-7 h-7 text-amber-400" />
-                8. FAQ Knowledge (ถามตอบและข้อมูลปัญหาด้านเทคนิค)
+                8. FAQ Knowledge (ถามตอบและค้นหาปัญหาด้านเทคนิคด้วย AI)
               </h1>
               <p className="text-xs sm:text-sm text-slate-300 max-w-3xl leading-relaxed mt-1">
-                ศูนย์รวมองค์ความรู้ด้านวิศวกรรมแสงสว่าง LUMENCRAFT สามารถเพิ่ม-แก้ไขคำถามคำตอบได้โดยตรง 
-                และเชื่อมโยงกับคำถามฝ่ายขายที่วิศวกรตอบเพื่อบรรจุขึ้นเป็น FAQ อย่างเป็นทางการ
+                พิมพ์คำค้นหาหรือคำถามทางเทคนิค ระบบจะค้นหาจากฐานข้อมูลภายในบริษัท 
+                และค้นคว้าข้อมูลวิศวกรรมไฟฟ้าสากลภายนอกด้วย AI ช่วยสรุปคำตอบ สูตรคำนวณ และข้อควรระวังให้ทันที
               </p>
             </div>
           </div>
 
-          {/* Quick Search Bar */}
-          <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-3 max-w-3xl">
-            <div className="relative flex-1">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                placeholder="ค้นหา: หม้อแปลง, สาย 24V, Voltage Drop, ตัดต่อ Neonflex, สายใต้น้ำ, โคมในสวน, DALI..."
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-900/90 border border-slate-700 text-white placeholder-slate-400 text-xs sm:text-sm focus:outline-hidden focus:ring-2 focus:ring-amber-500/40 focus:border-amber-500 transition shadow-inner"
-              />
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white text-xs cursor-pointer"
-                >
-                  ✕
-                </button>
-              )}
-            </div>
-
-            <button
-              onClick={() => setShowAskModal(true)}
-              className="px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold bg-white hover:bg-slate-100 text-slate-900 shadow-md transition flex items-center justify-center gap-2 shrink-0 cursor-pointer"
+          {/* ================= MAIN SEARCH BAR ================= */}
+          <div className="pt-2 space-y-2.5 max-w-4xl">
+            <form 
+              onSubmit={(e) => {
+                e.preventDefault();
+                handlePerformSearch();
+              }}
+              className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5"
             >
-              <MessageSquare className="w-4 h-4 text-amber-600" />
-              <span>ส่งคำถามให้วิศวกรตอบ</span>
-            </button>
+              <div className="relative flex-1">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="พิมพ์คำถาม เช่น: หม้อแปลง 24V กี่วัตต์สำหรับไฟ 20m, สาย DALI ลูปยาวสุด, ต่อสายไฟใต้น้ำ IP68..."
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  className="w-full pl-10 pr-10 py-3 rounded-xl bg-slate-900/95 border border-slate-700 text-white placeholder-slate-400 text-xs sm:text-sm focus:outline-hidden focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500 transition shadow-inner"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchQuery('');
+                      setAiResult(null);
+                      setAiError(null);
+                    }}
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white text-xs cursor-pointer p-1"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="submit"
+                  disabled={isAiSearching}
+                  className="flex-1 sm:flex-none px-5 py-3 rounded-xl text-xs sm:text-sm font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-md transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  {isAiSearching ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin text-slate-950" />
+                      <span>กำลังค้นหา & วิเคราะห์...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Search className="w-4 h-4" />
+                      <span>ค้นหา</span>
+                    </>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handlePerformSearch()}
+                  disabled={isAiSearching}
+                  className="flex-1 sm:flex-none px-4 py-3 rounded-xl text-xs sm:text-sm font-bold bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white shadow-md transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  <Globe className="w-4 h-4 text-amber-300" />
+                  <span>ค้นหาข้อมูลจากภายนอก</span>
+                </button>
+              </div>
+            </form>
+
+            {/* Quick Prompts Suggestions */}
+            <div className="flex flex-wrap items-center gap-1.5 pt-1">
+              <span className="text-[11px] text-slate-400 flex items-center gap-1 mr-1">
+                <Sparkles className="w-3 h-3 text-amber-400" />
+                ตัวอย่างคำถามยอดนิยม:
+              </span>
+              {quickSearchPrompts.map((p, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => handlePerformSearch(p.query)}
+                  className="px-2.5 py-1 rounded-lg text-[11px] bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/80 transition cursor-pointer"
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
           </div>
+
         </div>
       </div>
+
+      {/* ================= AI SEARCH & ANSWER RESULT CARD ================= */}
+      {isAiSearching && (
+        <div className="bg-gradient-to-br from-indigo-950/40 via-slate-900 to-slate-950 border border-indigo-500/30 rounded-2xl p-8 text-center space-y-3 shadow-lg animate-pulse">
+          <div className="w-12 h-12 rounded-2xl bg-indigo-500/20 border border-indigo-400/30 text-amber-400 flex items-center justify-center mx-auto">
+            <Loader2 className="w-6 h-6 animate-spin text-amber-400" />
+          </div>
+          <h3 className="text-base font-bold text-white">
+            กำลังค้นหาข้อมูลจาก Google และฐานข้อมูลวิศวกรรมไฟฟ้าสากล...
+          </h3>
+          <p className="text-xs text-slate-400 max-w-lg mx-auto">
+            กำลังสืบค้นข้อมูลสำหรับ: "{aiSearchedQuery || searchQuery}" พร้อมดึงลิงก์อ้างอิงและสรุปแนวทางปฏิบัติ
+          </p>
+        </div>
+      )}
+
+      {aiError && !isAiSearching && (
+        <div className="bg-rose-950/40 border border-rose-800/60 rounded-2xl p-4 text-rose-200 flex items-start justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0" />
+            <div>
+              <span className="font-bold">การแจ้งเตือนจากระบบค้นหาภายนอก:</span> {aiError}
+              <p className="text-rose-300 mt-0.5">คุณสามารถดูผลการค้นหาจากฐานข้อมูลภายในด้านล่าง หรือกดส่งคำถามให้ทีมวิศวกรได้โดยตรง</p>
+            </div>
+          </div>
+          <button
+            onClick={() => setAiError(null)}
+            className="p-1 text-rose-400 hover:text-white"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {aiResult && !isAiSearching && (
+        <div className="bg-gradient-to-br from-white via-indigo-50/30 to-amber-50/20 border-2 border-indigo-500/40 rounded-2xl p-6 shadow-md space-y-4 relative overflow-hidden">
+          <div className="absolute top-0 right-0 p-3 flex items-center gap-2">
+            <button
+              onClick={() => setAiResult(null)}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition"
+              title="ปิดผลการตอบของ AI"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/80 pb-3">
+            <div className="flex items-center space-x-2.5">
+              <div className="p-2 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-800 text-white shadow-xs">
+                <Globe className="w-5 h-5 text-amber-300" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-900 font-black text-[10px] uppercase tracking-wide border border-blue-200 flex items-center gap-1">
+                    <Globe className="w-3 h-3 text-blue-600" />
+                    Google Search & External Knowledge
+                  </span>
+                  {aiResult.categoryLabel && (
+                    <span className="px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 font-bold text-[10px]">
+                      {aiResult.categoryLabel}
+                    </span>
+                  )}
+                </div>
+                <h3 className="text-sm sm:text-base font-extrabold text-slate-900 mt-0.5">
+                  ผลการค้นหาข้อมูลจากภายนอก: "{aiSearchedQuery}"
+                </h3>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleCopyAiAnswer}
+                className="px-3 py-1.5 rounded-xl text-xs font-bold bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 shadow-2xs flex items-center gap-1.5 cursor-pointer"
+              >
+                <Copy className="w-3.5 h-3.5 text-slate-500" />
+                <span>{aiCopied ? 'คัดลอกแล้ว!' : 'คัดลอกคำตอบ'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleSaveAiAnswerAsFaq}
+                className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-xs flex items-center gap-1.5 cursor-pointer"
+              >
+                <BookmarkPlus className="w-4 h-4 text-slate-950" />
+                <span>➕ บันทึกข้อมูลนี้เป็น FAQ ใหม่</span>
+              </button>
+            </div>
+          </div>
+
+          {/* AI Summary Answer */}
+          <div className="p-4 rounded-xl bg-white border border-indigo-100 shadow-2xs text-xs sm:text-sm text-slate-800 leading-relaxed font-medium space-y-1.5">
+            <div className="text-xs font-bold text-indigo-900 flex items-center gap-1.5">
+              <Lightbulb className="w-4 h-4 text-amber-500" />
+              สรุปคำตอบจาก Google และหลักวิศวกรรมไฟฟ้า:
+            </div>
+            <p className="text-slate-800 whitespace-pre-line pl-1">{aiResult.summary}</p>
+          </div>
+
+          {/* AI Steps & Calculation */}
+          {aiResult.steps && aiResult.steps.length > 0 && (
+            <div className="bg-white/80 border border-slate-200/80 rounded-xl p-4 space-y-2.5">
+              <div className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                ขั้นตอนการคำนวณ / แนวทางปฏิบัติทางวิศวกรรม:
+              </div>
+              <div className="space-y-2 text-xs text-slate-700">
+                {aiResult.steps.map((step, si) => (
+                  <div key={si} className="p-2.5 bg-slate-50 rounded-lg border border-slate-200/60 leading-relaxed flex items-start gap-2.5">
+                    <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-800 font-bold text-[10px] flex items-center justify-center shrink-0 mt-0.5">
+                      {si + 1}
+                    </span>
+                    <span className="flex-1">{step}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Common Causes / Technical Tips */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {aiResult.technicalTips && (
+              <div className="bg-amber-50/80 border border-amber-200 rounded-xl p-3.5 flex items-start gap-2.5">
+                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <div className="text-xs text-amber-950">
+                  <span className="font-bold">ข้อควรระวังสำคัญหน้างาน:</span> {aiResult.technicalTips}
+                </div>
+              </div>
+            )}
+
+            {aiResult.commonCauses && aiResult.commonCauses.length > 0 && (
+              <div className="bg-rose-50/80 border border-rose-200 rounded-xl p-3.5 space-y-1">
+                <div className="text-xs font-bold text-rose-900 flex items-center gap-1.5">
+                  <AlertTriangle className="w-4 h-4 text-rose-600" />
+                  สาเหตุที่พบบ่อย:
+                </div>
+                <ul className="text-xs text-rose-800 pl-4 list-disc space-y-0.5">
+                  {aiResult.commonCauses.map((c, ci) => (
+                    <li key={ci}>{c}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+
+          {/* ================= GOOGLE SEARCH LINKS & WEB SOURCES ================= */}
+          <div className="bg-slate-900 text-white rounded-xl p-4 space-y-3 shadow-inner">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2">
+              <div className="flex items-center gap-2">
+                <Globe className="w-4 h-4 text-amber-400" />
+                <span className="text-xs font-bold text-white">
+                  🔗 ลิงก์แหล่งข้อมูลและผลการค้นหาจาก Google (Google Search Sources)
+                </span>
+              </div>
+              <span className="text-[10px] text-slate-400">
+                คลิกเพื่อเปิดดูเอกสารต้นฉบับในแท็บใหม่
+              </span>
+            </div>
+
+            {/* Direct Google Action Buttons */}
+            <div className="flex flex-wrap gap-2 pt-1">
+              <a
+                href={aiResult.googleLinks?.mainSearchUrl || `https://www.google.com/search?q=${encodeURIComponent(aiSearchedQuery + ' มาตรฐานวิศวกรรมไฟฟ้า')}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-[11px] font-bold flex items-center gap-1.5 transition shadow-xs"
+              >
+                <Search className="w-3.5 h-3.5 text-amber-300" />
+                <span>เปิดดูผลการค้นหาเต็มบน Google ↗</span>
+              </a>
+
+              <a
+                href={aiResult.googleLinks?.diagramSearchUrl || `https://www.google.com/search?tbm=isch&q=${encodeURIComponent(aiSearchedQuery + ' wiring diagram')}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-semibold flex items-center gap-1.5 border border-slate-700 transition"
+              >
+                <span>🖼️ ค้นหาไดอะแกรมวงจร (Images) ↗</span>
+              </a>
+
+              <a
+                href={aiResult.googleLinks?.datasheetSearchUrl || `https://www.google.com/search?q=${encodeURIComponent(aiSearchedQuery + ' datasheet pdf')}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-semibold flex items-center gap-1.5 border border-slate-700 transition"
+              >
+                <span>📑 ค้นหาคู่มือ Datasheet PDF ↗</span>
+              </a>
+            </div>
+
+            {/* Grounded Web Links Cards */}
+            {aiResult.googleLinks?.webSources && aiResult.googleLinks.webSources.length > 0 && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2">
+                {aiResult.googleLinks.webSources.map((src, idx) => (
+                  <a
+                    key={idx}
+                    href={src.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="p-2.5 rounded-lg bg-slate-800/90 hover:bg-slate-700/90 border border-slate-700/80 transition group flex items-start justify-between gap-2 text-left"
+                  >
+                    <div className="space-y-0.5 min-w-0">
+                      <div className="text-xs font-bold text-amber-300 group-hover:text-amber-200 line-clamp-1 flex items-center gap-1">
+                        <span>{src.title || 'แหล่งข้อมูลอ้างอิง'}</span>
+                      </div>
+                      <div className="text-[10px] text-slate-400 font-mono line-clamp-1">
+                        {src.url.replace(/^https?:\/\//, '')}
+                      </div>
+                      {src.description && (
+                        <div className="text-[10px] text-slate-300 line-clamp-1">
+                          {src.description}
+                        </div>
+                      )}
+                    </div>
+                    <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-white shrink-0 mt-0.5" />
+                  </a>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Sources and Tags */}
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-200/70 text-[11px] text-slate-500">
+            <div className="flex items-center gap-2">
+              <span className="font-semibold text-slate-600 flex items-center gap-1">
+                <Globe className="w-3.5 h-3.5 text-blue-600" />
+                อ้างอิงมาตรฐาน:
+              </span>
+              <span>{(aiResult.sources || ['มาตรฐานวิศวกรรม LUMENCRAFT', 'IEC Standards', 'Google Search Grounding']).join(', ')}</span>
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              {aiResult.tags && aiResult.tags.map(t => (
+                <span key={t} className="px-2 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px]">
+                  #{t}
+                </span>
+              ))}
+            </div>
+          </div>
+
+        </div>
+      )}
 
       {/* Main Section Navigation Tabs */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3">
@@ -398,8 +824,9 @@ export const FaqKnowledgeHub: React.FC<FaqKnowledgeHubProps> = ({
           </button>
         </div>
 
-        <div className="text-xs text-slate-500 font-medium">
-          คลังความรู้มาตรฐานอัปเดตอัตโนมัติผ่าน Cloud Firestore
+        <div className="text-xs text-slate-500 font-medium flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+          ซิงค์ฐานข้อมูลและเชื่อมต่อ AI ค้นหาอัจฉริยะ
         </div>
       </div>
 
@@ -407,31 +834,39 @@ export const FaqKnowledgeHub: React.FC<FaqKnowledgeHubProps> = ({
       {activeTab === 'faqs' && (
         <div className="space-y-6">
           
-          {/* Category Navigation Pills */}
-          <div className="flex flex-wrap gap-2">
-            {categories.map(cat => {
-              const Icon = cat.icon;
-              const isSelected = selectedCategory === cat.id;
-              return (
-                <button
-                  key={cat.id}
-                  onClick={() => setSelectedCategory(cat.id)}
-                  className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
-                    isSelected
-                      ? 'bg-slate-900 text-white shadow-sm ring-1 ring-slate-800'
-                      : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
-                  }`}
-                >
-                  <Icon className={`w-3.5 h-3.5 ${isSelected ? 'text-amber-400' : 'text-slate-500'}`} />
-                  <span>{cat.label}</span>
-                  <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${
-                    isSelected ? 'bg-slate-800 text-amber-400' : 'bg-slate-100 text-slate-600'
-                  }`}>
-                    {cat.count}
-                  </span>
-                </button>
-              );
-            })}
+          {/* Category Navigation Pills with smooth horizontal slide */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+            <div className="flex items-center gap-2 overflow-x-auto pb-1.5 slidebar-smooth slidebar-visible">
+              {categories.map(cat => {
+                const Icon = cat.icon;
+                const isSelected = selectedCategory === cat.id;
+                return (
+                  <button
+                    key={cat.id}
+                    onClick={() => setSelectedCategory(cat.id)}
+                    className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer shrink-0 ${
+                      isSelected
+                        ? 'bg-slate-900 text-white shadow-sm ring-1 ring-slate-800'
+                        : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    <Icon className={`w-3.5 h-3.5 ${isSelected ? 'text-amber-400' : 'text-slate-500'}`} />
+                    <span className="whitespace-nowrap">{cat.label}</span>
+                    <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${
+                      isSelected ? 'bg-slate-800 text-amber-400' : 'bg-slate-100 text-slate-600'
+                    }`}>
+                      {cat.count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {searchQuery && (
+              <span className="text-xs text-slate-500 bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200 font-medium">
+                พบข้อมูลในระบบตรงกับ "{searchQuery}": <strong>{filteredFaqs.length}</strong> รายการ
+              </span>
+            )}
           </div>
 
           {/* FAQ Items Grid / Accordion */}
@@ -439,11 +874,20 @@ export const FaqKnowledgeHub: React.FC<FaqKnowledgeHubProps> = ({
             {filteredFaqs.length === 0 ? (
               <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center space-y-3 shadow-2xs">
                 <HelpCircle className="w-12 h-12 text-slate-300 mx-auto" />
-                <h3 className="text-base font-bold text-slate-800">ไม่พบคำถามหรือหัวข้อที่ค้นหา "{searchQuery}"</h3>
-                <p className="text-xs text-slate-500">
-                  ลองค้นหาด้วยคำค้นอื่น หรือกดปุ่มเพิ่มคำถามคำตอบใหม่เพื่อบรรจุลงในระบบ
+                <h3 className="text-base font-bold text-slate-800">
+                  ไม่พบบทความที่ตรงกับ "{searchQuery}" ในฐานข้อมูลภายใน
+                </h3>
+                <p className="text-xs text-slate-500 max-w-md mx-auto">
+                  คุณสามารถให้ AI ช่วยค้นหาคำตอบและสรุปหลักวิศวกรรมไฟฟ้าให้ทันที หรือกดเพิ่มหัวข้อใหม่เพื่อบรรจุลงในระบบ
                 </p>
-                <div className="pt-2 flex justify-center gap-2">
+                <div className="pt-2 flex flex-wrap justify-center gap-2">
+                  <button
+                    onClick={() => handlePerformSearch()}
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 shadow-sm"
+                  >
+                    <Bot className="w-4 h-4 text-amber-300" />
+                    ให้ AI ค้นหาและตอบคำถามนี้
+                  </button>
                   <button
                     onClick={() => { setSearchQuery(''); setSelectedCategory('all'); }}
                     className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl"
@@ -1037,6 +1481,8 @@ export const FaqKnowledgeHub: React.FC<FaqKnowledgeHubProps> = ({
                   <option value="underwater">🌊 โคมใต้น้ำ & การต่อสายไฟใต้น้ำ (IP68)</option>
                   <option value="garden_landscape">🌳 การติดตั้งโคมในสวน & ข้อจำกัด (IP67)</option>
                   <option value="dali_control">💻 ระบบ DALI & Automation Control</option>
+                  <option value="troubleshooting">🛠️ แก้ปัญหาและอาการเสียหน้างาน</option>
+                  <option value="general">📖 ความรู้เทคนิคไฟฟ้าทั่วไป</option>
                 </select>
               </div>
 
@@ -1204,6 +1650,8 @@ export const FaqKnowledgeHub: React.FC<FaqKnowledgeHubProps> = ({
                     <option value="underwater">โคมใต้น้ำ & การต่อสายไฟใต้น้ำ (IP68)</option>
                     <option value="garden_landscape">การติดตั้งโคมในสวน & ข้อจำกัด (IP67)</option>
                     <option value="dali_control">ระบบ DALI & Automation Control</option>
+                    <option value="troubleshooting">การแก้ปัญหาและอาการเสียหน้างาน</option>
+                    <option value="general">เทคนิคไฟฟ้าทั่วไป</option>
                   </select>
                 </div>
 

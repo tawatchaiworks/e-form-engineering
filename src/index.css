@@ -1,1 +1,27 @@
 @import "tailwindcss";
+
+/* Custom Horizontal Slide Bar & Scrollbar Utilities */
+.slidebar-smooth {
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+}
+
+.slidebar-visible::-webkit-scrollbar {
+  height: 6px;
+}
+
+.slidebar-visible::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.8);
+  border-radius: 9999px;
+  margin: 0 16px;
+}
+
+.slidebar-visible::-webkit-scrollbar-thumb {
+  background: rgba(245, 158, 11, 0.45);
+  border-radius: 9999px;
+  transition: background 0.2s ease;
+}
+
+.slidebar-visible::-webkit-scrollbar-thumb:hover {
+  background: rgba(245, 158, 11, 0.85);
+}

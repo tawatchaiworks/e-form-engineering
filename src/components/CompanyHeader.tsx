@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Building2, ShieldCheck, Clock, MapPin, Zap, LogIn, LogOut, Cloud, CloudCheck, User as UserIcon, HelpCircle } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Building2, ShieldCheck, Clock, MapPin, Zap, LogIn, LogOut, Cloud, HelpCircle, ChevronLeft, ChevronRight, SlidersHorizontal } from 'lucide-react';
 import { Role } from '../types';
 import { User } from 'firebase/auth';
 
@@ -37,6 +37,104 @@ export const CompanyHeader: React.FC<CompanyHeaderProps> = ({
   onSignOutGoogle,
 }) => {
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const navContainerRef = useRef<HTMLDivElement>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+  const [scrollProgress, setScrollProgress] = useState(0);
+
+  // Mouse drag-to-scroll state
+  const [isDragging, setIsDragging] = useState(false);
+  const [startX, setStartX] = useState(0);
+  const [scrollLeftState, setScrollLeftState] = useState(0);
+
+  // Check scroll capability and progress
+  const updateScrollState = () => {
+    const el = navContainerRef.current;
+    if (!el) return;
+
+    const { scrollLeft, scrollWidth, clientWidth } = el;
+    const maxScroll = scrollWidth - clientWidth;
+
+    setCanScrollLeft(scrollLeft > 4);
+    setCanScrollRight(scrollLeft < maxScroll - 4);
+    
+    if (maxScroll > 0) {
+      setScrollProgress((scrollLeft / maxScroll) * 100);
+    } else {
+      setScrollProgress(0);
+    }
+  };
+
+  useEffect(() => {
+    updateScrollState();
+    window.addEventListener('resize', updateScrollState);
+    return () => window.removeEventListener('resize', updateScrollState);
+  }, []);
+
+  // Smoothly scroll active tab into view whenever role changes
+  useEffect(() => {
+    const el = navContainerRef.current;
+    if (!el) return;
+
+    const activeBtn = el.querySelector(`[data-role="${currentRole}"]`) as HTMLElement;
+    if (activeBtn) {
+      activeBtn.scrollIntoView({
+        behavior: 'smooth',
+        block: 'nearest',
+        inline: 'center',
+      });
+    }
+
+    setTimeout(updateScrollState, 300);
+  }, [currentRole]);
+
+  // Slide left / right handlers
+  const handleSlideLeft = () => {
+    if (navContainerRef.current) {
+      navContainerRef.current.scrollBy({ left: -260, behavior: 'smooth' });
+    }
+  };
+
+  const handleSlideRight = () => {
+    if (navContainerRef.current) {
+      navContainerRef.current.scrollBy({ left: 260, behavior: 'smooth' });
+    }
+  };
+
+  // Drag-to-scroll handlers
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (!navContainerRef.current) return;
+    setIsDragging(true);
+    setStartX(e.pageX - navContainerRef.current.offsetLeft);
+    setScrollLeftState(navContainerRef.current.scrollLeft);
+  };
+
+  const handleMouseLeaveOrUp = () => {
+    setIsDragging(false);
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDragging || !navContainerRef.current) return;
+    e.preventDefault();
+    const x = e.pageX - navContainerRef.current.offsetLeft;
+    const walk = (x - startX) * 1.5; // scroll speed multiplier
+    navContainerRef.current.scrollLeft = scrollLeftState - walk;
+    updateScrollState();
+  };
+
+  // Handle clicking directly on the slide bar track to jump/slide
+  const handleTrackClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    const el = navContainerRef.current;
+    if (!el) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickRatio = Math.max(0, Math.min(1, clickX / rect.width));
+    const maxScroll = el.scrollWidth - el.clientWidth;
+    el.scrollTo({
+      left: clickRatio * maxScroll,
+      behavior: 'smooth',
+    });
+  };
 
   return (
     <header className="bg-slate-900 text-white border-b border-slate-800 shadow-md print:hidden">
@@ -177,148 +275,252 @@ export const CompanyHeader: React.FC<CompanyHeaderProps> = ({
         </div>
       </div>
 
-      {/* Main Navigation Tabs */}
-      <div className="bg-slate-950/80 border-t border-slate-800/80 backdrop-blur">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <nav className="flex space-x-1 sm:space-x-2 overflow-x-auto py-2 scrollbar-none" aria-label="Tabs">
+      {/* Main Navigation Tabs with Slide Bar Controls */}
+      <div className="bg-slate-950/90 border-t border-slate-800/80 backdrop-blur relative select-none">
+        <div className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-8 relative">
+          
+          <div className="flex items-center gap-1 sm:gap-2">
             
-            {/* Admin Sale Tab */}
+            {/* Left Slide Arrow Button */}
             <button
-              id="nav-tab-admin-sale"
-              onClick={() => onRoleChange('admin_sale')}
-              className={`flex items-center px-3.5 py-2 rounded-lg text-xs sm:text-sm font-medium whitespace-nowrap transition ${
-                currentRole === 'admin_sale'
-                  ? 'bg-amber-500 text-slate-950 font-semibold shadow'
-                  : 'text-slate-300 hover:text-white hover:bg-slate-800'
-              }`}
+              id="btn-slide-left"
+              onClick={handleSlideLeft}
+              disabled={!canScrollLeft}
+              className={`hidden sm:flex items-center justify-center w-8 h-9 rounded-lg bg-slate-900/90 border border-slate-700/80 text-amber-400 hover:text-white hover:bg-slate-800 hover:border-amber-500/50 shadow-md transition shrink-0 z-10 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-slate-900/90 disabled:hover:border-slate-700/80`}
+              title="เลื่อนแท็บไปทางซ้าย"
+              aria-label="Slide Left"
             >
-              <Building2 className="w-4 h-4 mr-1.5" />
-              1. Admin Sale (ออกใบคำขอ)
-              <span className="ml-1.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-900/80 text-amber-300 border border-amber-500/40 inline-flex items-center gap-0.5">
-                🔒 Security
-              </span>
+              <ChevronLeft className="w-5 h-5" />
             </button>
 
-            {/* Sales Hub Tab */}
+            {/* Scrollable / Draggable Tabs Container */}
+            <div className="flex-1 overflow-hidden relative">
+              <nav
+                ref={navContainerRef}
+                onScroll={updateScrollState}
+                onMouseDown={handleMouseDown}
+                onMouseLeave={handleMouseLeaveOrUp}
+                onMouseUp={handleMouseLeaveOrUp}
+                onMouseMove={handleMouseMove}
+                className={`flex space-x-1.5 sm:space-x-2 overflow-x-auto py-2.5 slidebar-smooth slidebar-visible cursor-grab ${
+                  isDragging ? 'cursor-grabbing select-none' : ''
+                }`}
+                aria-label="Tabs"
+              >
+                
+                {/* Admin Sale Tab */}
+                <button
+                  id="nav-tab-admin-sale"
+                  data-role="admin_sale"
+                  onClick={() => onRoleChange('admin_sale')}
+                  className={`flex items-center px-3.5 py-2 rounded-xl text-xs sm:text-sm font-medium whitespace-nowrap transition cursor-pointer shrink-0 ${
+                    currentRole === 'admin_sale'
+                      ? 'bg-amber-500 text-slate-950 font-bold shadow-md ring-2 ring-amber-400/40'
+                      : 'text-slate-300 hover:text-white hover:bg-slate-800/80 border border-slate-800/80'
+                  }`}
+                >
+                  <Building2 className="w-4 h-4 mr-1.5" />
+                  1. Admin Sale (ออกใบคำขอ)
+                  <span className="ml-1.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-900/80 text-amber-300 border border-amber-500/40 inline-flex items-center gap-0.5">
+                    🔒 Security
+                  </span>
+                </button>
+
+                {/* Sales Hub Tab */}
+                <button
+                  id="nav-tab-sale"
+                  data-role="sale"
+                  onClick={() => onRoleChange('sale')}
+                  className={`flex items-center px-3.5 py-2 rounded-xl text-xs sm:text-sm font-medium whitespace-nowrap transition relative cursor-pointer shrink-0 ${
+                    currentRole === 'sale'
+                      ? 'bg-blue-600 text-white font-bold shadow-md ring-2 ring-blue-400/40'
+                      : 'text-slate-300 hover:text-white hover:bg-slate-800/80 border border-slate-800/80'
+                  }`}
+                >
+                  <ShieldCheck className="w-4 h-4 mr-1.5" />
+                  2. ฝ่ายขาย (Sales Hub)
+                  <span className="ml-1.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-900/80 text-blue-300 border border-blue-500/40 inline-flex items-center gap-0.5">
+                    🔒 Security
+                  </span>
+                  {(pendingSalesCount > 0 || overdueCount > 0) && (
+                    <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-rose-500 text-white animate-pulse">
+                      {pendingSalesCount + overdueCount}
+                    </span>
+                  )}
+                </button>
+
+                {/* Engineer Hub Tab */}
+                <button
+                  id="nav-tab-engineer"
+                  data-role="engineer"
+                  onClick={() => onRoleChange('engineer')}
+                  className={`flex items-center px-3.5 py-2 rounded-xl text-xs sm:text-sm font-medium whitespace-nowrap transition relative cursor-pointer shrink-0 ${
+                    currentRole === 'engineer'
+                      ? 'bg-amber-600 text-white font-bold shadow-md ring-2 ring-amber-400/40'
+                      : 'text-slate-300 hover:text-white hover:bg-slate-800/80 border border-slate-800/80'
+                  }`}
+                >
+                  <Clock className="w-4 h-4 mr-1.5" />
+                  3. วิศวกร (Engineer Hub)
+                  {pendingEngineerCount > 0 && (
+                    <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-red-600 text-white animate-bounce">
+                      {pendingEngineerCount} ใหม่
+                    </span>
+                  )}
+                </button>
+
+                {/* Customer Portal Tab */}
+                <button
+                  id="nav-tab-customer"
+                  data-role="customer"
+                  onClick={() => onRoleChange('customer')}
+                  className={`flex items-center px-3.5 py-2 rounded-xl text-xs sm:text-sm font-medium whitespace-nowrap transition relative cursor-pointer shrink-0 ${
+                    currentRole === 'customer'
+                      ? 'bg-purple-600 text-white font-bold shadow-md ring-2 ring-purple-400/40'
+                      : 'text-slate-300 hover:text-white hover:bg-slate-800/80 border border-slate-800/80'
+                  }`}
+                >
+                  <span className="text-amber-300 mr-1.5">★</span>
+                  4. ประเมินลูกค้า (Customer Portal)
+                  {pendingCustomerCount > 0 && (
+                    <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-purple-500 text-white">
+                      {pendingCustomerCount}
+                    </span>
+                  )}
+                </button>
+
+                {/* Executive KPI Dashboard */}
+                <button
+                  id="nav-tab-dashboard"
+                  data-role="dashboard"
+                  onClick={() => onRoleChange('dashboard')}
+                  className={`flex items-center px-3.5 py-2 rounded-xl text-xs sm:text-sm font-medium whitespace-nowrap transition cursor-pointer shrink-0 ${
+                    currentRole === 'dashboard'
+                      ? 'bg-emerald-600 text-white font-bold shadow-md ring-2 ring-emerald-400/40'
+                      : 'text-slate-300 hover:text-white hover:bg-slate-800/80 border border-slate-800/80'
+                  }`}
+                >
+                  <span className="mr-1.5">📊</span>
+                  5. แดชบอร์ดผู้บริหาร (KPI)
+                  <span className="ml-1.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-900/80 text-amber-300 border border-amber-500/40 inline-flex items-center gap-0.5">
+                    🔒 Security
+                  </span>
+                </button>
+
+                {/* Staff Management */}
+                <button
+                  id="nav-tab-staff"
+                  data-role="staff"
+                  onClick={() => onRoleChange('staff')}
+                  className={`flex items-center px-3.5 py-2 rounded-xl text-xs sm:text-sm font-medium whitespace-nowrap transition cursor-pointer shrink-0 ${
+                    currentRole === 'staff'
+                      ? 'bg-indigo-600 text-white font-bold shadow-md ring-2 ring-indigo-400/40'
+                      : 'text-slate-300 hover:text-white hover:bg-slate-800/80 border border-slate-800/80'
+                  }`}
+                >
+                  <span className="mr-1.5">👥</span>
+                  6. จัดการบุคลากร (Staff)
+                </button>
+
+                {/* Master Request Logs & A4 */}
+                <button
+                  id="nav-tab-logs"
+                  data-role="logs"
+                  onClick={() => onRoleChange('logs')}
+                  className={`flex items-center px-3.5 py-2 rounded-xl text-xs sm:text-sm font-medium whitespace-nowrap transition cursor-pointer shrink-0 ${
+                    currentRole === 'logs'
+                      ? 'bg-slate-700 text-white font-bold shadow-md ring-2 ring-slate-400/40'
+                      : 'text-slate-300 hover:text-white hover:bg-slate-800/80 border border-slate-800/80'
+                  }`}
+                >
+                  <span className="mr-1.5">📑</span>
+                  7. รายการทั้งหมด & พิมพ์ A4
+                </button>
+
+                {/* 8. FAQ Knowledge Base (ถามตอบและข้อมูลปัญหาด้านเทคนิค) */}
+                <button
+                  id="nav-tab-faq"
+                  data-role="faq"
+                  onClick={() => onRoleChange('faq')}
+                  className={`flex items-center px-3.5 py-2 rounded-xl text-xs sm:text-sm font-medium whitespace-nowrap transition cursor-pointer shrink-0 ${
+                    currentRole === 'faq'
+                      ? 'bg-amber-600 text-white font-bold shadow-md ring-2 ring-amber-400/40'
+                      : 'text-slate-300 hover:text-white hover:bg-slate-800/80 border border-slate-800/80'
+                  }`}
+                >
+                  <HelpCircle className="w-4 h-4 mr-1.5 text-amber-400" />
+                  8. FAQ Knowledge (ถามตอบ & ปัญหาเทคนิค)
+                </button>
+
+              </nav>
+            </div>
+
+            {/* Right Slide Arrow Button */}
             <button
-              id="nav-tab-sale"
-              onClick={() => onRoleChange('sale')}
-              className={`flex items-center px-3.5 py-2 rounded-lg text-xs sm:text-sm font-medium whitespace-nowrap transition relative ${
-                currentRole === 'sale'
-                  ? 'bg-blue-600 text-white font-semibold shadow'
-                  : 'text-slate-300 hover:text-white hover:bg-slate-800'
-              }`}
+              id="btn-slide-right"
+              onClick={handleSlideRight}
+              disabled={!canScrollRight}
+              className={`hidden sm:flex items-center justify-center w-8 h-9 rounded-lg bg-slate-900/90 border border-slate-700/80 text-amber-400 hover:text-white hover:bg-slate-800 hover:border-amber-500/50 shadow-md transition shrink-0 z-10 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-slate-900/90 disabled:hover:border-slate-700/80`}
+              title="เลื่อนแท็บไปทางขวา"
+              aria-label="Slide Right"
             >
-              <ShieldCheck className="w-4 h-4 mr-1.5" />
-              2. ฝ่ายขาย (Sales Hub)
-              <span className="ml-1.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-900/80 text-blue-300 border border-blue-500/40 inline-flex items-center gap-0.5">
-                🔒 Security
-              </span>
-              {(pendingSalesCount > 0 || overdueCount > 0) && (
-                <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-rose-500 text-white animate-pulse">
-                  {pendingSalesCount + overdueCount}
-                </span>
-              )}
+              <ChevronRight className="w-5 h-5" />
             </button>
 
-            {/* Engineer Hub Tab */}
-            <button
-              id="nav-tab-engineer"
-              onClick={() => onRoleChange('engineer')}
-              className={`flex items-center px-3.5 py-2 rounded-lg text-xs sm:text-sm font-medium whitespace-nowrap transition relative ${
-                currentRole === 'engineer'
-                  ? 'bg-amber-600 text-white font-semibold shadow'
-                  : 'text-slate-300 hover:text-white hover:bg-slate-800'
-              }`}
-            >
-              <Clock className="w-4 h-4 mr-1.5" />
-              3. วิศวกร (Engineer Hub)
-              {pendingEngineerCount > 0 && (
-                <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-red-600 text-white animate-bounce">
-                  {pendingEngineerCount} ใหม่
-                </span>
-              )}
-            </button>
+          </div>
 
-            {/* Customer Portal Tab */}
-            <button
-              id="nav-tab-customer"
-              onClick={() => onRoleChange('customer')}
-              className={`flex items-center px-3.5 py-2 rounded-lg text-xs sm:text-sm font-medium whitespace-nowrap transition relative ${
-                currentRole === 'customer'
-                  ? 'bg-purple-600 text-white font-semibold shadow'
-                  : 'text-slate-300 hover:text-white hover:bg-slate-800'
-              }`}
-            >
-              <span className="text-amber-300 mr-1.5">★</span>
-              4. ประเมินลูกค้า (Customer Portal)
-              {pendingCustomerCount > 0 && (
-                <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-purple-500 text-white">
-                  {pendingCustomerCount}
-                </span>
-              )}
-            </button>
+          {/* Interactive Slide Bar Track & Indicator (บาร์สไลด์แถบหัวข้อ) */}
+          <div className="pt-0.5 pb-2 px-2 flex items-center justify-between gap-3 text-[11px] text-slate-400">
+            
+            <div className="flex items-center gap-1.5 text-amber-400/90 font-medium">
+              <SlidersHorizontal className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">บาร์สไลด์แถบหัวข้อ (Slide Bar):</span>
+              <span className="sm:hidden">สไลด์หัวข้อ:</span>
+            </div>
 
-            {/* Executive KPI Dashboard */}
-            <button
-              id="nav-tab-dashboard"
-              onClick={() => onRoleChange('dashboard')}
-              className={`flex items-center px-3.5 py-2 rounded-lg text-xs sm:text-sm font-medium whitespace-nowrap transition ${
-                currentRole === 'dashboard'
-                  ? 'bg-emerald-600 text-white font-semibold shadow'
-                  : 'text-slate-300 hover:text-white hover:bg-slate-800'
-              }`}
+            {/* Slider Track (Clickable & Responsive) */}
+            <div 
+              onClick={handleTrackClick}
+              className="flex-1 max-w-xl h-2 bg-slate-800/90 hover:bg-slate-800 rounded-full relative cursor-pointer overflow-hidden border border-slate-700/60 shadow-inner group transition"
+              title="คลิกหรือเลื่อนบาร์สไลด์เพื่อเปลี่ยนมุมมองหัวข้อ"
             >
-              <span className="mr-1.5">📊</span>
-              5. แดชบอร์ดผู้บริหาร (KPI)
-              <span className="ml-1.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-900/80 text-amber-300 border border-amber-500/40 inline-flex items-center gap-0.5">
-                🔒 Security
-              </span>
-            </button>
+              {/* Slider Track Background Pulse */}
+              <div className="absolute inset-0 bg-slate-800"></div>
 
-            {/* Staff Management */}
-            <button
-              id="nav-tab-staff"
-              onClick={() => onRoleChange('staff')}
-              className={`flex items-center px-3.5 py-2 rounded-lg text-xs sm:text-sm font-medium whitespace-nowrap transition ${
-                currentRole === 'staff'
-                  ? 'bg-indigo-600 text-white font-semibold shadow'
-                  : 'text-slate-300 hover:text-white hover:bg-slate-800'
-              }`}
-            >
-              <span className="mr-1.5">👥</span>
-              6. จัดการบุคลากร (Staff)
-            </button>
+              {/* Slider Thumb / Glowing Active Bar */}
+              <div 
+                className="h-full bg-gradient-to-r from-amber-500 via-orange-500 to-amber-400 rounded-full transition-all duration-150 ease-out shadow-xs shadow-amber-500/50 group-hover:from-amber-400 group-hover:to-amber-300"
+                style={{
+                  width: '35%',
+                  marginLeft: `${scrollProgress * 0.65}%`,
+                }}
+              />
+            </div>
 
-            {/* Master Request Logs & A4 */}
-            <button
-              id="nav-tab-logs"
-              onClick={() => onRoleChange('logs')}
-              className={`flex items-center px-3.5 py-2 rounded-lg text-xs sm:text-sm font-medium whitespace-nowrap transition ${
-                currentRole === 'logs'
-                  ? 'bg-slate-700 text-white font-semibold shadow'
-                  : 'text-slate-300 hover:text-white hover:bg-slate-800'
-              }`}
-            >
-              <span className="mr-1.5">📑</span>
-              7. รายการทั้งหมด & พิมพ์ A4
-            </button>
+            {/* Mobile quick slide touch buttons */}
+            <div className="flex sm:hidden items-center gap-1">
+              <button
+                onClick={handleSlideLeft}
+                disabled={!canScrollLeft}
+                className="p-1 rounded bg-slate-800 text-slate-300 disabled:opacity-30"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={handleSlideRight}
+                disabled={!canScrollRight}
+                className="p-1 rounded bg-slate-800 text-slate-300 disabled:opacity-30"
+              >
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
 
-            {/* 8. FAQ Knowledge Base (ถามตอบและข้อมูลปัญหาด้านเทคนิค) */}
-            <button
-              id="nav-tab-faq"
-              onClick={() => onRoleChange('faq')}
-              className={`flex items-center px-3.5 py-2 rounded-lg text-xs sm:text-sm font-medium whitespace-nowrap transition ${
-                currentRole === 'faq'
-                  ? 'bg-amber-600 text-white font-semibold shadow'
-                  : 'text-slate-300 hover:text-white hover:bg-slate-800'
-              }`}
-            >
-              <HelpCircle className="w-4 h-4 mr-1.5 text-amber-400" />
-              8. FAQ Knowledge (ถามตอบ & ปัญหาเทคนิค)
-            </button>
+            <div className="text-[10px] text-slate-400 font-mono hidden md:block">
+              8 หัวข้อหลัก (Admin / Sales / Engineer / Portal / KPI / Staff / Logs / FAQ)
+            </div>
 
-          </nav>
+          </div>
+
         </div>
       </div>
     </header>
