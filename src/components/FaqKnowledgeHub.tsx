@@ -7,7 +7,9 @@ import {
   Waves, Trees, Cable, Cpu, Plus, Edit3, Trash2,
   Calculator, Check, X, ArrowRight, Share2, Copy,
   UserCheck, Clock, ShieldCheck, Bot, Globe,
-  Loader2, RefreshCw, BookmarkPlus, ExternalLink
+  Loader2, RefreshCw, BookmarkPlus, ExternalLink,
+  Sun, Maximize2, LayoutGrid, Gauge, Layers, Info,
+  Upload, FileCode, FolderUp, SlidersHorizontal, Settings2, ArrowDownUp, RefreshCcw
 } from 'lucide-react';
 import { FaqItem, FaqCategory, EngineerInquiry, StaffMember } from '../types';
 import { INITIAL_FAQS } from '../utils/initialFaqs';
@@ -120,12 +122,72 @@ export const FaqKnowledgeHub: React.FC<FaqKnowledgeHubProps> = ({
   const [promotingInquiry, setPromotingInquiry] = useState<EngineerInquiry | null>(null);
 
   // Interactive Calculator States
-  // 1. Switching Wattage Calculator
+  const [calcActiveSubTab, setCalcActiveSubTab] = useState<'all' | 'lumen_lux' | 'dc_current' | 'ac_current' | 'switching' | 'voltage_drop'>('all');
+
+  // 1. Lumen, Lux & Fixture Spacing Calculator State
+  const [roomWidth, setRoomWidth] = useState<number>(6); // meters
+  const [roomLength, setRoomLength] = useState<number>(8); // meters
+  const [roomHeight, setRoomHeight] = useState<number>(3.0); // meters
+  const [workplaneHeight, setWorkplaneHeight] = useState<number>(0.75); // meters (standard table height)
+  const [roomPreset, setRoomPreset] = useState<string>('office_500');
+  const [targetLux, setTargetLux] = useState<number>(500); // Lux
+  
+  // Luminaire Type & IES File Integration State
+  const [selectedLuminaireType, setSelectedLuminaireType] = useState<string>('panel_60x60');
+  const [efficacyLmPerWatt, setEfficacyLmPerWatt] = useState<number>(110); // lm/W
+  const [fixtureWatts, setFixtureWatts] = useState<number>(36); // Watts per fixture
+  const [customFixtureLumen, setCustomFixtureLumen] = useState<number>(0); // 0 = auto calculate from watts * efficacy
+  const [ufCoeff, setUfCoeff] = useState<number>(0.70); // Utilization factor
+  const [mfCoeff, setMfCoeff] = useState<number>(0.80); // Maintenance factor
+
+  // AUTO vs MANUAL fixture count mode
+  const [fixtureCalcMode, setFixtureCalcMode] = useState<'auto' | 'manual'>('auto');
+  const [manualFixtureRows, setManualFixtureRows] = useState<number>(3);
+  const [manualFixtureCols, setManualFixtureCols] = useState<number>(2);
+
+  // Parsed IES photometric file state
+  const [parsedIesData, setParsedIesData] = useState<{
+    fileName: string;
+    luminaireName: string;
+    manufacturer: string;
+    lumens: number;
+    watts: number;
+    efficacy: number;
+    beamAngle: string;
+    candelaMax: number;
+  } | null>(null);
+  const [iesRawText, setIesRawText] = useState<string>('');
+  const [iesUploadStatus, setIesUploadStatus] = useState<string>('');
+
+  // 2. DC Current & Wattage Calculator State (with Multi-load Items breakdown)
+  const [dcInputVoltage, setDcInputVoltage] = useState<number>(24);
+  const [dcDeratingFactor, setDcDeratingFactor] = useState<number>(0.80);
+  const [dcUseItemized, setDcUseItemized] = useState<boolean>(true);
+  const [dcManualWatts, setDcManualWatts] = useState<number>(280);
+  const [dcLoadItems, setDcLoadItems] = useState<Array<{ id: string; name: string; watts: number; qty: number }>>([
+    { id: '1', name: 'ไฟเส้นหลืบฝ้า LED Strip 24V (15m x 14.4W)', watts: 216, qty: 1 },
+    { id: '2', name: 'ไฟตู้โชว์ Neon Flex 24V (5m x 9.6W)', watts: 48, qty: 1 },
+    { id: '3', name: 'ไฟส่องขั้นบันได Step Light 24V (6 จุด x 3W)', watts: 18, qty: 1 },
+  ]);
+  const [newDcItemName, setNewDcItemName] = useState<string>('');
+  const [newDcItemWatts, setNewDcItemWatts] = useState<number>(50);
+  const [newDcItemQty, setNewDcItemQty] = useState<number>(1);
+
+  // 3. AC Current & Breaker/Cable Calculator State (including DC load conversion)
+  const [acDirectWatts, setAcDirectWatts] = useState<number>(1200); // Direct AC lamps / fixtures
+  const [acIncludeDcLoad, setAcIncludeDcLoad] = useState<boolean>(true); // Add DC driver power load
+  const [acPhaseType, setAcPhaseType] = useState<'1_phase' | '3_phase'>('1_phase');
+  const [acVoltage1P, setAcVoltage1P] = useState<number>(230);
+  const [acVoltage3P, setAcVoltage3P] = useState<number>(400);
+  const [acPowerFactor, setAcPowerFactor] = useState<number>(0.95);
+  const [acEfficiency, setAcEfficiency] = useState<number>(0.92);
+
+  // 4. Switching Wattage Calculator (LED Strip)
   const [calcStripLength, setCalcStripLength] = useState<number>(15);
   const [calcWattPerMeter, setCalcWattPerMeter] = useState<number>(14.4);
   const [calcSafetyFactor, setCalcSafetyFactor] = useState<number>(0.8);
 
-  // 2. Voltage Drop Calculator (24VDC)
+  // 5. Voltage Drop Calculator (24VDC)
   const [calcLoadWatts, setCalcLoadWatts] = useState<number>(100);
   const [calcCableLength, setCalcCableLength] = useState<number>(15);
   const [calcCableSize, setCalcCableSize] = useState<number>(2.5);
@@ -381,13 +443,344 @@ export const FaqKnowledgeHub: React.FC<FaqKnowledgeHubProps> = ({
     }, 2000);
   };
 
-  // Calculations
-  // 1. Switching Wattage
+  // Calculations & Engineering Formulas
+  // Luminaire Types Specification Table
+  const LUMINAIRE_TYPES: Record<string, {
+    name: string;
+    category: string;
+    defaultWatts: number;
+    defaultLmPerW: number;
+    beamAngle: string;
+    uf: number;
+    mf: number;
+    icon: string;
+    desc: string;
+  }> = {
+    'panel_60x60': {
+      name: 'โคมฝังฝ้า Panel Light 60x60 / 30x120',
+      category: 'สำนักงาน / ห้องเรียน / อาคารพาณิชย์',
+      defaultWatts: 36,
+      defaultLmPerW: 110,
+      beamAngle: '110°–120° (มุมกว้าง แสงกระจายเนียนตา)',
+      uf: 0.70,
+      mf: 0.80,
+      icon: '🔲',
+      desc: 'กระจายแสงสม่ำเสมอ ลดแสงแยงตา UGR < 19 สบายตาตลอดวัน'
+    },
+    'downlight_recessed': {
+      name: 'โคมดาวน์ไลท์ Recessed Downlight (COB/SMD 60°)',
+      category: 'ที่พักอาศัย / โรงแรม / ร้านค้า',
+      defaultWatts: 15,
+      defaultLmPerW: 100,
+      beamAngle: '60° (มุมปานกลาง แสงเน้นจุดสว่างนุ่มนวล)',
+      uf: 0.60,
+      mf: 0.80,
+      icon: '🔘',
+      desc: 'สำหรับฝังฝ้าเพดาน ให้แสงสว่างทั่วไปและเน้นความสวยงามสถาปัตยกรรม'
+    },
+    'spotlight_track': {
+      name: 'โคมสปอตไลท์ / แทร็กไลท์ Track Spotlight (24°–36°)',
+      category: 'โชว์รูม / ร้านค้า / แกลเลอรี',
+      defaultWatts: 25,
+      defaultLmPerW: 95,
+      beamAngle: '24°–36° (มุมแคบ ส่องเน้นวัตถุสินค้า)',
+      uf: 0.50,
+      mf: 0.85,
+      icon: '🎯',
+      desc: 'เน้นขับสินค้า งานศิลปะ ให้มีมิติ มีค่าความส่องสว่างเฉพาะจุดสูง (High Lux Beam)'
+    },
+    'highbay_ufo': {
+      name: 'โคมไฮเบย์ High Bay UFO Industrial (90°–120°)',
+      category: 'คลังสินค้า / โรงงาน / โรงยิม (เพดานสูง >6m)',
+      defaultWatts: 100,
+      defaultLmPerW: 140,
+      beamAngle: '90°–120° (กระจายแสงเพดานสูง)',
+      uf: 0.75,
+      mf: 0.75,
+      icon: '🛸',
+      desc: 'ประสิทธิภาพแสงสูงพิเศษ ลูเมนสูง ประหยัดไฟในพื้นที่อุตสาหกรรม'
+    },
+    'linear_batten': {
+      name: 'โคมลีเนียร์ Linear Trunking / Batten 1.2m',
+      category: 'ซูเปอร์มาร์เก็ต / ทางเดิน / คอนโด',
+      defaultWatts: 28,
+      defaultLmPerW: 120,
+      beamAngle: '120° (แสงเส้นต่อเนื่อง)',
+      uf: 0.65,
+      mf: 0.80,
+      icon: '📏',
+      desc: 'ติดตั้งต่อสายเป็นแนวยาวต่อเนื่อง ให้แสงสว่างตามแนวทางเดินและชั้นวาง'
+    },
+    'wallwasher': {
+      name: 'โคมส่องผนัง Wall Washer / Indirect Strip',
+      category: 'แสงบรรยากาศ / โถงต้อนรับ / ผนังตกแต่ง',
+      defaultWatts: 18,
+      defaultLmPerW: 85,
+      beamAngle: 'Asymmetric (ส่องล้างระนาบผนัง)',
+      uf: 0.45,
+      mf: 0.80,
+      icon: '🧱',
+      desc: 'ส่องสว่างบนพื้นผิวผนังเพื่อสร้างความรู้สึกกว้างขวางและลดความเปรียบต่างแสง'
+    },
+    'custom_ies': {
+      name: '📁 นำเข้าไฟล์ IES Photometric (.ies)',
+      category: 'ไฟล์โฟโตเมตริกมาตรฐานแล็บ (IESNA:LM-63)',
+      defaultWatts: 36,
+      defaultLmPerW: 110,
+      beamAngle: 'Custom Photometric Curve',
+      uf: 0.65,
+      mf: 0.80,
+      icon: '📄',
+      desc: 'ดึงข้อมูลโฟโตเมตริก Luminous Flux, วัตต์ และเส้นโค้งการกระจายแสงจาก IES จริง'
+    }
+  };
+
+  // IES File Upload Handler
+  const handleIesFileUpload = (file: File) => {
+    setIesUploadStatus('กำลังอ่านไฟล์ IES...');
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const text = (e.target?.result as string) || '';
+        setIesRawText(text);
+        
+        const lines = text.split(/\r?\n/).map(l => l.trim());
+        let luminaireName = file.name.replace(/\.[^/.]+$/, "");
+        let manufacturer = "LUMENCRAFT";
+        
+        for (const line of lines) {
+          if (line.startsWith('[LUMCAT]') || line.startsWith('[LUMINAIRE]')) {
+            const val = line.replace(/^\[.*?\]\s*/, '').trim();
+            if (val) luminaireName = val;
+          }
+          if (line.startsWith('[MANUFAC]')) {
+            const val = line.replace(/^\[.*?\]\s*/, '').trim();
+            if (val) manufacturer = val;
+          }
+        }
+
+        let tiltIndex = lines.findIndex(l => l.toUpperCase().startsWith('TILT='));
+        if (tiltIndex === -1) tiltIndex = 0;
+        
+        const dataTokens: string[] = [];
+        for (let i = tiltIndex + 1; i < lines.length; i++) {
+          const line = lines[i];
+          if (line.startsWith('[')) continue;
+          const parts = line.split(/\s+/).filter(Boolean);
+          dataTokens.push(...parts);
+          if (dataTokens.length >= 15) break;
+        }
+
+        const numLamps = Number(dataTokens[0]) || 1;
+        let lumensPerLamp = Number(dataTokens[1]) || 0;
+        let inputWatts = Number(dataTokens[12]) || 0;
+
+        if (inputWatts <= 0) inputWatts = 36;
+        let totalLumens = (lumensPerLamp > 0) ? (numLamps * lumensPerLamp) : Math.round(inputWatts * 110);
+        const eff = Math.round((totalLumens / inputWatts) * 10) / 10;
+
+        const parsed = {
+          fileName: file.name,
+          luminaireName,
+          manufacturer,
+          lumens: totalLumens,
+          watts: inputWatts,
+          efficacy: eff,
+          beamAngle: '110° Standard IES',
+          candelaMax: Math.round(totalLumens * 0.32)
+        };
+
+        setParsedIesData(parsed);
+        setSelectedLuminaireType('custom_ies');
+        setFixtureWatts(inputWatts);
+        setEfficacyLmPerWatt(eff);
+        setCustomFixtureLumen(totalLumens);
+        setIesUploadStatus(`✅ โหลด IES สำเร็จ: ${luminaireName} (${totalLumens} lm / ${inputWatts}W)`);
+      } catch (err) {
+        setIesUploadStatus('⚠️ รูปแบบไฟล์ IES ไม่ถูกต้อง โปรดตรวจสอบไฟล์');
+      }
+    };
+    reader.onerror = () => setIesUploadStatus('❌ ไม่สามารถอ่านไฟล์ได้');
+    reader.readAsText(file);
+  };
+
+  const loadSampleIes = (sampleType: 'panel_36w' | 'downlight_15w' | 'highbay_150w' | 'spotlight_25w') => {
+    if (sampleType === 'panel_36w') {
+      const parsed = {
+        fileName: 'LUMENCRAFT_Panel_60x60_36W.ies',
+        luminaireName: 'LUMENCRAFT LED Panel 60x60 Premium 36W',
+        manufacturer: 'LUMENCRAFT Lighting Solutions',
+        lumens: 3960,
+        watts: 36,
+        efficacy: 110,
+        beamAngle: '110° Diffused',
+        candelaMax: 1350
+      };
+      setParsedIesData(parsed);
+      setSelectedLuminaireType('custom_ies');
+      setFixtureWatts(36);
+      setEfficacyLmPerWatt(110);
+      setCustomFixtureLumen(3960);
+      setUfCoeff(0.70);
+      setIesUploadStatus('✅ โหลด Sample IES Panel 60x60 เรียบร้อย');
+    } else if (sampleType === 'downlight_15w') {
+      const parsed = {
+        fileName: 'LUMENCRAFT_COB_Downlight_15W_60D.ies',
+        luminaireName: 'LUMENCRAFT Architectural Downlight COB 15W 60°',
+        manufacturer: 'LUMENCRAFT Lighting Solutions',
+        lumens: 1575,
+        watts: 15,
+        efficacy: 105,
+        beamAngle: '60° Medium Spot',
+        candelaMax: 2200
+      };
+      setParsedIesData(parsed);
+      setSelectedLuminaireType('custom_ies');
+      setFixtureWatts(15);
+      setEfficacyLmPerWatt(105);
+      setCustomFixtureLumen(1575);
+      setUfCoeff(0.60);
+      setIesUploadStatus('✅ โหลด Sample IES Downlight 15W เรียบร้อย');
+    } else if (sampleType === 'highbay_150w') {
+      const parsed = {
+        fileName: 'LUMENCRAFT_HighBay_UFO_150W_120D.ies',
+        luminaireName: 'LUMENCRAFT Industrial Highbay UFO 150W 140lm/W',
+        manufacturer: 'LUMENCRAFT Heavy Duty',
+        lumens: 21000,
+        watts: 150,
+        efficacy: 140,
+        beamAngle: '120° Wide Industrial',
+        candelaMax: 7800
+      };
+      setParsedIesData(parsed);
+      setSelectedLuminaireType('custom_ies');
+      setFixtureWatts(150);
+      setEfficacyLmPerWatt(140);
+      setCustomFixtureLumen(21000);
+      setUfCoeff(0.75);
+      setIesUploadStatus('✅ โหลด Sample IES Highbay UFO 150W เรียบร้อย');
+    } else if (sampleType === 'spotlight_25w') {
+      const parsed = {
+        fileName: 'LUMENCRAFT_Track_Spot_25W_24D.ies',
+        luminaireName: 'LUMENCRAFT Retail Track Spot 25W 24° Narrow',
+        manufacturer: 'LUMENCRAFT Display & Gallery',
+        lumens: 2375,
+        watts: 25,
+        efficacy: 95,
+        beamAngle: '24° Narrow Accent',
+        candelaMax: 6500
+      };
+      setParsedIesData(parsed);
+      setSelectedLuminaireType('custom_ies');
+      setFixtureWatts(25);
+      setEfficacyLmPerWatt(95);
+      setCustomFixtureLumen(2375);
+      setUfCoeff(0.50);
+      setIesUploadStatus('✅ โหลด Sample IES Spotlight 25W เรียบร้อย');
+    }
+  };
+
+  // Room Type Presets with CIE/TIS Lux recommendations
+  const ROOM_LUX_PRESETS: Record<string, { label: string; lux: number; desc: string; icon: string }> = {
+    'office_500': { label: 'สำนักงาน / ออฟฟิศทั่วไป (General Office)', lux: 500, desc: 'มาตรฐาน มอก. สำหรับการอ่าน เขียน พิมพ์คอมพิวเตอร์', icon: '💼' },
+    'meeting_400': { label: 'ห้องประชุม / สัมมนา (Meeting & Conference)', lux: 400, desc: 'เน้นความสบายตา สื่อสารและนำเสนองาน', icon: '👥' },
+    'corridor_150': { label: 'ทางเดิน / โถงบันได (Corridor & Hallway)', lux: 150, desc: 'สัญจรปลอดภัย มองเห็นสิ่งกีดขวางชัดเจน', icon: '🚶' },
+    'warehouse_250': { label: 'คลังสินค้า / สโตร์ (Warehouse & Storage)', lux: 250, desc: 'อ่านฉลาก พาเลท และป้ายกำกับสินค้า', icon: '📦' },
+    'retail_800': { label: 'ร้านค้า / โชว์รูมสินค้า (Retail & Showroom)', lux: 800, desc: 'เน้นสินค้าโดดเด่น สดใส ดึงดูดสายตาลูกค้า', icon: '🛍️' },
+    'drawing_1000': { label: 'ห้องเขียนแบบ / งานละเอียด (Drafting & Fine Craft)', lux: 1000, desc: 'ความแม่นยำสูง แยกแยะเฉดสีและลายเส้น', icon: '📐' },
+    'residential_living_200': { label: 'ห้องนั่งเล่น / ที่พักอาศัย (Living Room)', lux: 200, desc: 'บรรยากาศผ่อนคลาย อบอุ่น สบายตา', icon: '🛋️' },
+    'residential_bed_150': { label: 'ห้องนอน (Bedroom / Rest Area)', lux: 150, desc: 'แสงนุ่มนวล ไม่แยงตา เหมาะแก่การพักผ่อน', icon: '🛏️' },
+    'custom': { label: 'กำหนดค่า Lux เอง (Custom Target Lux)', lux: targetLux, desc: 'ระบุค่าความสว่างตามสเปกเฉพาะโครงการ', icon: '⚙️' },
+  };
+
+  // 1. Lumen, Lux & Fixture Spacing Calculations
+  const fixtureLumens = customFixtureLumen > 0 ? customFixtureLumen : (fixtureWatts * efficacyLmPerWatt);
+  const roomArea = Math.max(0.1, roomWidth * roomLength);
+  const roomVolume = roomArea * roomHeight;
+  const effectiveHeight = Math.max(0.4, roomHeight - workplaneHeight);
+  const roomIndexK = (roomWidth * roomLength) / (effectiveHeight * Math.max(0.1, roomWidth + roomLength));
+  
+  // Total Lumens needed in room = (Target Lux * Area) / (UF * MF)
+  const totalRequiredLumens = (targetLux * roomArea) / (Math.max(0.1, ufCoeff) * Math.max(0.1, mfCoeff));
+  const exactFixtureCount = totalRequiredLumens / Math.max(1, fixtureLumens);
+  const recommendedFixtureCount = Math.max(1, Math.round(exactFixtureCount));
+
+  // Optimal Auto Fixture Grid Allocation (Cols x Rows matching Room Aspect Ratio Length / Width)
+  const roomAspectRatio = Math.max(0.2, roomLength / Math.max(0.1, roomWidth));
+  const autoCalcRows = Math.max(1, Math.round(Math.sqrt(recommendedFixtureCount * roomAspectRatio)));
+  const autoCalcCols = Math.max(1, Math.round(recommendedFixtureCount / autoCalcRows));
+  
+  // Active effective Rows & Cols based on AUTO vs MANUAL mode
+  const effectiveRows = fixtureCalcMode === 'auto' ? autoCalcRows : Math.max(1, manualFixtureRows);
+  const effectiveCols = fixtureCalcMode === 'auto' ? autoCalcCols : Math.max(1, manualFixtureCols);
+  const gridFixtureCount = effectiveRows * effectiveCols;
+
+  const spacingLength = roomLength / effectiveRows; // distance between luminaires along length (m)
+  const spacingWidth = roomWidth / effectiveCols;   // distance between luminaires along width (m)
+  const wallSpacingLength = spacingLength / 2; // wall to first luminaire along length (m)
+  const wallSpacingWidth = spacingWidth / 2;   // wall to first luminaire along width (m)
+  
+  const maxSpacing = Math.max(spacingLength, spacingWidth);
+  const spacingToHeightRatio = maxSpacing / effectiveHeight; // Spacing to Height Ratio (SHR)
+  const isSpacingUniform = spacingToHeightRatio <= 1.25;
+  const isSpacingAcceptable = spacingToHeightRatio <= 1.50;
+
+  // Actual Calculated Lux with chosen grid
+  const actualCalculatedLux = (gridFixtureCount * fixtureLumens * ufCoeff * mfCoeff) / roomArea;
+  const luxDifferencePercent = ((actualCalculatedLux - targetLux) / targetLux) * 100;
+
+  // Total Lighting Watts and Power Density
+  const totalLightingWatts = gridFixtureCount * fixtureWatts;
+  const lightingPowerDensity = totalLightingWatts / roomArea; // W/m^2
+  const isLpdCompliant = lightingPowerDensity <= 12; // Energy code <= 12 W/m^2
+
+  // 2. DC Current & Wattage Calculations (Multi-loads / Direct)
+  const totalDcItemsWatts = dcLoadItems.reduce((sum, it) => sum + (it.watts * it.qty), 0);
+  const effectiveDcWatts = dcUseItemized ? totalDcItemsWatts : dcManualWatts;
+  const dcCurrentAmp = effectiveDcWatts / Math.max(1, dcInputVoltage);
+  const dcRatedAmpSafety = dcCurrentAmp / Math.max(0.5, dcDeratingFactor);
+  const dcRecommendedPsuWatts = Math.ceil(effectiveDcWatts / Math.max(0.5, dcDeratingFactor));
+  let dcRecommendedCable = '1.5 sq.mm.';
+  if (dcCurrentAmp <= 4) dcRecommendedCable = '1.0 sq.mm.';
+  else if (dcCurrentAmp <= 8) dcRecommendedCable = '1.5 sq.mm.';
+  else if (dcCurrentAmp <= 14) dcRecommendedCable = '2.5 sq.mm.';
+  else if (dcCurrentAmp <= 22) dcRecommendedCable = '4.0 sq.mm.';
+  else if (dcCurrentAmp <= 32) dcRecommendedCable = '6.0 sq.mm.';
+  else dcRecommendedCable = '10.0 sq.mm. หรือแยก 2 วงจรย่อย';
+
+  // 3. AC Current & Breaker Calculations (with DC conversion to AC)
+  const dcInputWattsFromAc = acIncludeDcLoad ? (effectiveDcWatts / Math.max(0.5, acEfficiency)) : 0;
+  const totalAcCombinedWatts = acDirectWatts + dcInputWattsFromAc;
+
+  let acCurrentAmp = 0;
+  const acVoltageActive = acPhaseType === '1_phase' ? acVoltage1P : acVoltage3P;
+  if (acPhaseType === '1_phase') {
+    acCurrentAmp = totalAcCombinedWatts / (acVoltage1P * Math.max(0.5, acPowerFactor));
+  } else {
+    acCurrentAmp = totalAcCombinedWatts / (Math.sqrt(3) * acVoltage3P * Math.max(0.5, acPowerFactor));
+  }
+  const acApparentPowerVA = totalAcCombinedWatts / Math.max(0.5, acPowerFactor);
+  const acContinuousLoadAmp = acCurrentAmp * 1.25; // 125% continuous load rule
+  
+  // Standard MCB Breaker table: 6, 10, 16, 20, 25, 32, 40, 50, 63, 80, 100, 125
+  const standardMCBs = [6, 10, 16, 20, 25, 32, 40, 50, 63, 80, 100, 125];
+  const recommendedMCB = standardMCBs.find(mcb => mcb >= acContinuousLoadAmp) || 125;
+  
+  let acRecommendedCable = '2.5 sq.mm.';
+  if (recommendedMCB <= 10) acRecommendedCable = '1.5 sq.mm. (IEC 01 THW / VAF)';
+  else if (recommendedMCB <= 16) acRecommendedCable = '2.5 sq.mm. (IEC 01 THW)';
+  else if (recommendedMCB <= 20) acRecommendedCable = '4.0 sq.mm. (IEC 01 THW)';
+  else if (recommendedMCB <= 32) acRecommendedCable = '6.0 sq.mm. (IEC 01 THW)';
+  else if (recommendedMCB <= 40) acRecommendedCable = '10.0 sq.mm. (IEC 01 THW)';
+  else if (recommendedMCB <= 55) acRecommendedCable = '16.0 sq.mm. (IEC 01 THW)';
+  else acRecommendedCable = '25.0 sq.mm. (IEC 01 THW)';
+
+  // 4. Switching Wattage (LED Strip)
   const totalStripWatts = calcStripLength * calcWattPerMeter;
   const recommendedPsuWatts = totalStripWatts / (calcSafetyFactor || 0.8);
   const currentAmp24V = recommendedPsuWatts / 24;
 
-  // 2. Voltage Drop
+  // 5. Voltage Drop (24VDC)
   const loadAmp = calcLoadWatts / 24;
   const voltageDropVolts = (2 * calcCableLength * loadAmp * 0.0175) / (calcCableSize || 2.5);
   const voltageAtEnd = 24 - voltageDropVolts;
@@ -1200,206 +1593,1579 @@ export const FaqKnowledgeHub: React.FC<FaqKnowledgeHubProps> = ({
 
       {/* ================= TAB 3: ENGINEERING CALCULATORS ================= */}
       {activeTab === 'calculators' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="space-y-6">
           
-          {/* 1. Switching Wattage & Derating Calculator */}
-          <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-4">
-            <div className="flex items-center space-x-3 border-b border-slate-100 pb-3">
-              <div className="p-2.5 rounded-xl bg-amber-100 text-amber-800">
-                <Zap className="w-5 h-5" />
+          {/* Sub-navigation bar for engineering tools */}
+          <div className="bg-slate-900 text-white p-3 rounded-2xl border border-slate-800 shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <div className="p-2 rounded-xl bg-amber-500 text-slate-950 font-bold">
+                <Calculator className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-slate-900">
-                  เครื่องคำนวณขนาดหม้อแปลง Switching 12V/24V
-                </h3>
-                <p className="text-xs text-slate-500">
-                  คำนวณวัตต์รวมและเผื่อ Safety Factor (Derating 80% Rule)
+                <h2 className="text-sm font-bold text-white flex items-center gap-1.5">
+                  เครื่องมือคำนวณวิศวกรรมแสงสว่างและไฟฟ้าหน้างาน
+                  <span className="px-2 py-0.5 rounded-full text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                    LUMEN Professional Engine
+                  </span>
+                </h2>
+                <p className="text-[11px] text-slate-400">
+                  คำนวณความสว่าง Lux/Lumen, ระยะติดตั้งโคม, กระแสไฟฟ้า DC/AC, หม้อแปลง และแรงดันตก
                 </p>
               </div>
             </div>
 
-            <div className="space-y-3.5 text-xs">
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  1. ความยาวไฟเส้น LED Strip ทั้งหมด (เมตร):
-                </label>
-                <div className="flex items-center gap-3">
-                  <input
-                    type="range"
-                    min={1}
-                    max={100}
-                    step={0.5}
-                    value={calcStripLength}
-                    onChange={e => setCalcStripLength(Number(e.target.value))}
-                    className="flex-1 accent-amber-600"
-                  />
-                  <span className="w-16 px-2 py-1 rounded-lg bg-slate-100 border border-slate-300 font-bold font-mono text-center">
-                    {calcStripLength} m
-                  </span>
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  2. กำลังวัตต์ต่อเมตรของไฟเส้น (Watt/Meter):
-                </label>
-                <div className="grid grid-cols-4 gap-2">
-                  {[4.8, 9.6, 14.4, 19.2].map(w => (
-                    <button
-                      key={w}
-                      type="button"
-                      onClick={() => setCalcWattPerMeter(w)}
-                      className={`p-2 rounded-xl text-xs font-bold border transition ${
-                        calcWattPerMeter === w
-                          ? 'bg-amber-500 text-slate-950 border-amber-600 shadow-xs'
-                          : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-                      }`}
-                    >
-                      {w} W/m
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  3. กฎความปลอดภัย Safety Derating Factor:
-                </label>
-                <select
-                  value={calcSafetyFactor}
-                  onChange={e => setCalcSafetyFactor(Number(e.target.value))}
-                  className="w-full p-2 rounded-lg border border-slate-300 bg-white font-semibold text-slate-800"
-                >
-                  <option value={0.8}>80% Derating (มาตรฐานวิศวกรรม LUMENCRAFT)</option>
-                  <option value={0.7}>70% Derating (พื้นที่อุณหภูมิสูง / กล่องปิดทึบ)</option>
-                  <option value={0.85}>85% Derating (ติดตั้งในที่เปิดโล่ง ถ่ายเทดี)</option>
-                </select>
-              </div>
-
-              <div className="p-4 rounded-xl bg-gradient-to-br from-slate-900 to-slate-950 text-white space-y-2 shadow-inner">
-                <div className="text-[11px] text-amber-400 font-bold uppercase tracking-wider">
-                  ผลลัพธ์การคำนวณหม้อแปลง
-                </div>
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-slate-300">โหลดวัตต์รวมหน้างาน:</span>
-                  <span className="font-mono font-bold text-white text-sm">{totalStripWatts.toFixed(1)} Watts</span>
-                </div>
-                <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-800">
-                  <span className="text-amber-300 font-bold">ขนาดหม้อแปลงขั้นต่ำที่ต้องเลือก:</span>
-                  <span className="font-mono font-black text-amber-400 text-base">{Math.ceil(recommendedPsuWatts)} Watts</span>
-                </div>
-                <div className="flex items-center justify-between text-xs text-slate-400">
-                  <span>กระแสไฟ 24VDC:</span>
-                  <span className="font-mono font-bold text-white">~{currentAmp24V.toFixed(2)} A</span>
-                </div>
-                <div className="text-[11px] text-slate-300 bg-slate-800/80 p-2 rounded border border-slate-700">
-                  💡 รุ่นหม้อแปลงแนะนำ: <strong>{Math.ceil(recommendedPsuWatts) <= 100 ? '100W/150W 24V' : Math.ceil(recommendedPsuWatts) <= 200 ? '200W/240W 24V' : Math.ceil(recommendedPsuWatts) <= 350 ? '350W 24V' : 'แยกวงจรหม้อแปลง 2 ตัว'}</strong>
-                </div>
-              </div>
+            {/* Sub-tab Filter Pills with Horizontal Slide */}
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 slidebar-smooth slidebar-visible">
+              <button
+                type="button"
+                onClick={() => setCalcActiveSubTab('all')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition whitespace-nowrap cursor-pointer ${
+                  calcActiveSubTab === 'all'
+                    ? 'bg-amber-500 text-slate-950 shadow-xs'
+                    : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white'
+                }`}
+              >
+                📊 แสดงทั้งหมด
+              </button>
+              <button
+                type="button"
+                onClick={() => setCalcActiveSubTab('lumen_lux')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition whitespace-nowrap cursor-pointer flex items-center gap-1 ${
+                  calcActiveSubTab === 'lumen_lux'
+                    ? 'bg-amber-500 text-slate-950 shadow-xs'
+                    : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white'
+                }`}
+              >
+                <Sun className="w-3.5 h-3.5" />
+                <span>1. Lumen & Lux & ระยะโคม</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setCalcActiveSubTab('dc_current')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition whitespace-nowrap cursor-pointer flex items-center gap-1 ${
+                  calcActiveSubTab === 'dc_current'
+                    ? 'bg-amber-500 text-slate-950 shadow-xs'
+                    : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white'
+                }`}
+              >
+                <Zap className="w-3.5 h-3.5" />
+                <span>2. กระแสไฟฟ้า DC (12V/24V/48V)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setCalcActiveSubTab('ac_current')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition whitespace-nowrap cursor-pointer flex items-center gap-1 ${
+                  calcActiveSubTab === 'ac_current'
+                    ? 'bg-amber-500 text-slate-950 shadow-xs'
+                    : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white'
+                }`}
+              >
+                <Gauge className="w-3.5 h-3.5" />
+                <span>3. กระแสไฟฟ้า AC (1-Phase / 3-Phase)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setCalcActiveSubTab('switching')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition whitespace-nowrap cursor-pointer flex items-center gap-1 ${
+                  calcActiveSubTab === 'switching'
+                    ? 'bg-amber-500 text-slate-950 shadow-xs'
+                    : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white'
+                }`}
+              >
+                <Sliders className="w-3.5 h-3.5" />
+                <span>4. หม้อแปลง LED Strip</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setCalcActiveSubTab('voltage_drop')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition whitespace-nowrap cursor-pointer flex items-center gap-1 ${
+                  calcActiveSubTab === 'voltage_drop'
+                    ? 'bg-amber-500 text-slate-950 shadow-xs'
+                    : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white'
+                }`}
+              >
+                <Cable className="w-3.5 h-3.5" />
+                <span>5. แรงดันตกสายไฟ 24V</span>
+              </button>
             </div>
           </div>
 
-          {/* 2. Voltage Drop Calculator */}
-          <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-4">
-            <div className="flex items-center space-x-3 border-b border-slate-100 pb-3">
-              <div className="p-2.5 rounded-xl bg-blue-100 text-blue-800">
-                <Cable className="w-5 h-5" />
+          {/* ================= 1. LUMEN & LUX & FIXTURE SPACING CALCULATOR ================= */}
+          {(calcActiveSubTab === 'all' || calcActiveSubTab === 'lumen_lux') && (
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-6">
+              
+              {/* Header */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+                <div className="flex items-center space-x-3">
+                  <div className="p-3 rounded-2xl bg-amber-500 text-slate-950 shadow-md">
+                    <Sun className="w-6 h-6 stroke-[2.5]" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-lg font-black text-slate-900">
+                        1. เครื่องคำนวณค่า Lumen, Lux & ระยะการติดตั้งโคมไฟตามความสูงห้อง
+                      </h3>
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                        CIE & TIS Standards
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      เลือกชนิดโคมไฟ, นำเข้าไฟล์ IES Photometric, ปรับแต่งจำนวนโคมไฟ (AUTO / แก้ไขเอง), และคำนวณระยะติดตั้งที่สม่ำเสมอ
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 text-xs font-bold bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200 text-slate-700">
+                  <Maximize2 className="w-4 h-4 text-amber-600" />
+                  <span>พื้นที่ห้อง: <strong>{roomArea.toFixed(1)}</strong> ตร.ม. (กว้าง {roomWidth}m × ยาว {roomLength}m)</span>
+                </div>
               </div>
-              <div>
-                <h3 className="text-base font-bold text-slate-900">
-                  เครื่องคำนวณแรงดันตกสาย 24V (Voltage Drop)
-                </h3>
-                <p className="text-xs text-slate-500">
-                  ตรวจสอบระยะสายไฟและขนาดสายทองแดงไม่ให้แสงดรอป
-                </p>
+
+              {/* Grid Form & Outputs */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                
+                {/* Left Columns: Inputs (7 cols) */}
+                <div className="lg:col-span-7 space-y-5 text-xs">
+
+                  {/* 1. Luminaire Type Selector & IES Photometric File Reader */}
+                  <div className="p-4 rounded-xl bg-slate-900 text-white border border-slate-800 space-y-3 shadow-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2.5">
+                      <div className="flex items-center gap-2">
+                        <span className="p-1.5 rounded-lg bg-amber-500 text-slate-950 font-bold">
+                          <SlidersHorizontal className="w-4 h-4" />
+                        </span>
+                        <div>
+                          <label className="font-bold text-amber-400 text-xs">
+                            เลือกชนิดโคมไฟ หรือ นำเข้าไฟล์สเปกแสง IES (.ies)
+                          </label>
+                          <p className="text-[10px] text-slate-400">
+                            ดึงค่าลูเมน, วัตต์, ประสิทธิภาพ lm/W และค่าสัมประสิทธิ์การใช้งานโดยอัตโนมัติ
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Mode Badge */}
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-amber-300 font-mono border border-slate-700">
+                        {LUMINAIRE_TYPES[selectedLuminaireType]?.category || 'Luminaire Type'}
+                      </span>
+                    </div>
+
+                    {/* Luminaire Preset Chips */}
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      {Object.entries(LUMINAIRE_TYPES).map(([typeKey, lum]) => {
+                        const isSelected = selectedLuminaireType === typeKey;
+                        return (
+                          <button
+                            key={typeKey}
+                            type="button"
+                            onClick={() => {
+                              setSelectedLuminaireType(typeKey);
+                              if (typeKey !== 'custom_ies') {
+                                setFixtureWatts(lum.defaultWatts);
+                                setEfficacyLmPerWatt(lum.defaultLmPerW);
+                                setCustomFixtureLumen(0);
+                                setUfCoeff(lum.uf);
+                                setMfCoeff(lum.mf);
+                              }
+                            }}
+                            className={`p-2.5 rounded-xl text-left border transition cursor-pointer flex flex-col justify-between ${
+                              isSelected
+                                ? 'bg-amber-500 text-slate-950 border-amber-400 font-bold shadow-sm'
+                                : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700 hover:text-white'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="text-base">{lum.icon}</span>
+                              <span className={`text-[10px] px-1.5 py-0.2 rounded font-mono ${
+                                isSelected ? 'bg-slate-950 text-amber-300' : 'bg-slate-900 text-slate-400'
+                              }`}>
+                                {lum.defaultWatts}W
+                              </span>
+                            </div>
+                            <div className="font-bold text-[11px] mt-1.5 line-clamp-1">
+                              {lum.name.split('(')[0]}
+                            </div>
+                            <div className={`text-[9px] mt-0.5 line-clamp-1 ${isSelected ? 'text-slate-900 font-medium' : 'text-slate-400'}`}>
+                              {lum.beamAngle}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* IES Photometric File Reader Section */}
+                    <div className="mt-3 p-3 rounded-xl bg-slate-950/90 border border-slate-800 space-y-2.5">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5 text-xs font-bold text-amber-300">
+                          <FileCode className="w-4 h-4 text-amber-400" />
+                          <span>นำเข้าไฟล์ IES Photometric (.ies) จากเครื่องคำนวณ / ห้องแล็บ:</span>
+                        </div>
+                        
+                        {/* Sample IES Quick Load buttons */}
+                        <div className="flex items-center gap-1">
+                          <span className="text-[10px] text-slate-400 hidden sm:inline">ตัวอย่าง IES:</span>
+                          <button
+                            type="button"
+                            onClick={() => loadSampleIes('panel_36w')}
+                            className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 cursor-pointer"
+                          >
+                            Panel 36W
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => loadSampleIes('downlight_15w')}
+                            className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 cursor-pointer"
+                          >
+                            Downlight 15W
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => loadSampleIes('highbay_150w')}
+                            className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 cursor-pointer"
+                          >
+                            Highbay 150W
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => loadSampleIes('spotlight_25w')}
+                            className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 cursor-pointer"
+                          >
+                            Spot 25W
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Dropzone & File Input */}
+                      <label className="flex flex-col items-center justify-center p-3 border-2 border-dashed border-slate-700 hover:border-amber-500 rounded-xl bg-slate-900/60 cursor-pointer transition text-center group">
+                        <Upload className="w-5 h-5 text-slate-400 group-hover:text-amber-400 mb-1 transition" />
+                        <span className="text-xs font-semibold text-slate-300 group-hover:text-amber-300">
+                          คลิกหรือลากไฟล์ .ies มาวางที่นี่เพื่อประมวลผลค่า Luminous Flux & Watts ทันที
+                        </span>
+                        <span className="text-[10px] text-slate-500 mt-0.5">
+                          รองรับมาตรฐาน IESNA LM-63 (Photometric Data File)
+                        </span>
+                        <input
+                          type="file"
+                          accept=".ies,.txt"
+                          onChange={e => {
+                            if (e.target.files && e.target.files[0]) {
+                              handleIesFileUpload(e.target.files[0]);
+                            }
+                          }}
+                          className="hidden"
+                        />
+                      </label>
+
+                      {/* Status / Parsed IES Summary */}
+                      {iesUploadStatus && (
+                        <div className="p-2 rounded-lg bg-amber-950/40 border border-amber-600/50 text-[11px] text-amber-200 flex items-center justify-between">
+                          <span>{iesUploadStatus}</span>
+                          {parsedIesData && (
+                            <span className="font-mono font-bold text-amber-400">
+                              {parsedIesData.lumens} lm / {parsedIesData.watts}W ({parsedIesData.efficacy} lm/W)
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  
+                  {/* Preset Room Type Selector */}
+                  <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
+                    <label className="block font-bold text-slate-800">
+                      🏢 เลือกประเภทห้อง / การใช้งาน (Room Application Preset):
+                    </label>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      {Object.entries(ROOM_LUX_PRESETS).map(([key, item]) => {
+                        const isSelected = roomPreset === key;
+                        return (
+                          <button
+                            key={key}
+                            type="button"
+                            onClick={() => {
+                              setRoomPreset(key);
+                              if (key !== 'custom') {
+                                setTargetLux(item.lux);
+                              }
+                            }}
+                            className={`p-2 rounded-xl text-left border transition cursor-pointer flex flex-col justify-between ${
+                              isSelected
+                                ? 'bg-slate-900 text-white border-slate-900 shadow-xs'
+                                : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="text-base">{item.icon}</span>
+                              <span className={`px-1.5 py-0.2 rounded font-mono font-bold text-[10px] ${
+                                isSelected ? 'bg-amber-400 text-slate-950' : 'bg-slate-100 text-slate-800'
+                              }`}>
+                                {item.lux} Lux
+                              </span>
+                            </div>
+                            <div className="font-bold text-[11px] mt-1 line-clamp-1">
+                              {item.label.split('(')[0]}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Room Dimensions Sliders */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    
+                    {/* Width */}
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between font-bold text-slate-700">
+                        <span>ความกว้างห้อง (Width):</span>
+                        <span className="font-mono text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                          {roomWidth} ม.
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min={1.5}
+                        max={30}
+                        step={0.5}
+                        value={roomWidth}
+                        onChange={e => setRoomWidth(Number(e.target.value))}
+                        className="w-full accent-amber-500 cursor-pointer"
+                      />
+                    </div>
+
+                    {/* Length */}
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between font-bold text-slate-700">
+                        <span>ความยาวห้อง (Length):</span>
+                        <span className="font-mono text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                          {roomLength} ม.
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min={1.5}
+                        max={40}
+                        step={0.5}
+                        value={roomLength}
+                        onChange={e => setRoomLength(Number(e.target.value))}
+                        className="w-full accent-amber-500 cursor-pointer"
+                      />
+                    </div>
+
+                    {/* Height */}
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between font-bold text-slate-700">
+                        <span>ความสูงห้อง (Height):</span>
+                        <span className="font-mono text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                          {roomHeight} ม.
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min={2.0}
+                        max={14}
+                        step={0.1}
+                        value={roomHeight}
+                        onChange={e => setRoomHeight(Number(e.target.value))}
+                        className="w-full accent-amber-500 cursor-pointer"
+                      />
+                    </div>
+
+                  </div>
+
+                  {/* Workplane Height & Target Lux */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    
+                    {/* Workplane Height */}
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">
+                        ระดับความสูงระนาบงาน (Workplane Height):
+                      </label>
+                      <select
+                        value={workplaneHeight}
+                        onChange={e => setWorkplaneHeight(Number(e.target.value))}
+                        className="w-full p-2 rounded-xl border border-slate-300 bg-white font-medium text-slate-800 text-xs"
+                      >
+                        <option value={0.75}>0.75 ม. (ระดับโต๊ะทำงาน / สำนักงาน / เคาน์เตอร์)</option>
+                        <option value={0.85}>0.85 ม. (ระดับโต๊ะปฏิบัติการ / โรงงาน / โต๊ะยืน)</option>
+                        <option value={0.0}>0.00 ม. (ระดับพื้น / ทางเดิน / ลานจอดรถ / คลังสินค้า)</option>
+                      </select>
+                      <div className="text-[10px] text-slate-500 mt-1">
+                        ความสูงประสิทธิผลจากโคมถึงโต๊ะงาน (H_eff) = <strong>{effectiveHeight.toFixed(2)}</strong> ม.
+                      </div>
+                    </div>
+
+                    {/* Target Lux */}
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">
+                        เป้าหมายความสว่าง (Target Lux):
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          min={50}
+                          max={3000}
+                          step={25}
+                          value={targetLux}
+                          onChange={e => {
+                            setTargetLux(Number(e.target.value));
+                            setRoomPreset('custom');
+                          }}
+                          className="flex-1 p-2 rounded-xl border border-slate-300 font-mono font-bold text-slate-900 text-xs"
+                        />
+                        <span className="font-bold text-slate-600 px-2.5 py-2 rounded-xl bg-slate-100 border border-slate-200">
+                          Lux (lx)
+                        </span>
+                      </div>
+                    </div>
+
+                  </div>
+
+                  {/* Fixture Efficacy (Lumen/Watt) & Wattage */}
+                  <div className="p-4 rounded-xl bg-amber-50/50 border border-amber-200/80 space-y-3">
+                    <div className="flex items-center justify-between font-bold text-slate-900 border-b border-amber-200/60 pb-2">
+                      <span className="flex items-center gap-1.5 text-amber-900">
+                        <Lightbulb className="w-4 h-4 text-amber-600" />
+                        ประสิทธิภาพโคมไฟและกำลังวัตต์ (Lumen / Watt / Fixture):
+                      </span>
+                      <span className="text-[11px] text-amber-800 font-mono font-bold">
+                        {fixtureLumens.toLocaleString()} Lumen / โคม
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      
+                      {/* Efficacy (Lumen per Watt) */}
+                      <div>
+                        <label className="block font-bold text-slate-700 mb-1">
+                          ค่าประสิทธิภาพส่องสว่าง (Lumen / Watt):
+                        </label>
+                        <div className="grid grid-cols-4 gap-1.5">
+                          {[90, 100, 110, 140].map(lmw => (
+                            <button
+                              key={lmw}
+                              type="button"
+                              onClick={() => {
+                                setEfficacyLmPerWatt(lmw);
+                                setCustomFixtureLumen(0);
+                              }}
+                              className={`py-1.5 rounded-lg text-xs font-bold border transition cursor-pointer ${
+                                efficacyLmPerWatt === lmw && customFixtureLumen === 0
+                                  ? 'bg-amber-500 text-slate-950 border-amber-600 shadow-xs'
+                                  : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
+                              }`}
+                            >
+                              {lmw} lm/W
+                            </button>
+                          ))}
+                        </div>
+                        <div className="mt-1.5 flex items-center gap-2">
+                          <input
+                            type="number"
+                            min={50}
+                            max={220}
+                            value={efficacyLmPerWatt}
+                            onChange={e => {
+                              setEfficacyLmPerWatt(Number(e.target.value));
+                              setCustomFixtureLumen(0);
+                            }}
+                            className="w-20 p-1.5 rounded-lg border border-slate-300 font-mono font-bold text-center text-xs"
+                          />
+                          <span className="text-[10px] text-slate-500">lm/W (กำหนดค่าเอง)</span>
+                        </div>
+                      </div>
+
+                      {/* Watt per Fixture */}
+                      <div>
+                        <label className="block font-bold text-slate-700 mb-1">
+                          กำลังวัตต์ต่อโคมไฟ (Watt / Fixture):
+                        </label>
+                        <div className="grid grid-cols-4 gap-1.5">
+                          {[15, 24, 36, 100].map(w => (
+                            <button
+                              key={w}
+                              type="button"
+                              onClick={() => {
+                                setFixtureWatts(w);
+                                setCustomFixtureLumen(0);
+                              }}
+                              className={`py-1.5 rounded-lg text-xs font-bold border transition cursor-pointer ${
+                                fixtureWatts === w && customFixtureLumen === 0
+                                  ? 'bg-amber-500 text-slate-950 border-amber-600 shadow-xs'
+                                  : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
+                              }`}
+                            >
+                              {w} W
+                            </button>
+                          ))}
+                        </div>
+                        <div className="mt-1.5 flex items-center gap-2">
+                          <input
+                            type="number"
+                            min={3}
+                            max={500}
+                            value={fixtureWatts}
+                            onChange={e => {
+                              setFixtureWatts(Number(e.target.value));
+                              setCustomFixtureLumen(0);
+                            }}
+                            className="w-20 p-1.5 rounded-lg border border-slate-300 font-mono font-bold text-center text-xs"
+                          />
+                          <span className="text-[10px] text-slate-500">Watts (เช่น 18W, 50W, 150W)</span>
+                        </div>
+                      </div>
+
+                    </div>
+                  </div>
+
+                  {/* Engineering Coefficients UF & MF */}
+                  <div className="grid grid-cols-2 gap-3 text-[11px] text-slate-600 bg-slate-50 p-3 rounded-xl border border-slate-200">
+                    <div>
+                      <span className="font-bold text-slate-800">Utilization Factor (UF):</span>
+                      <select
+                        value={ufCoeff}
+                        onChange={e => setUfCoeff(Number(e.target.value))}
+                        className="w-full mt-1 p-1.5 rounded border border-slate-300 bg-white font-mono font-bold text-slate-800 text-xs"
+                      >
+                        <option value={0.75}>0.75 (โคม Highbay / แสงลงตรง สะท้อนสูง)</option>
+                        <option value={0.70}>0.70 (ห้องเพดานและผนังสีขาว โคม Panel 60x60)</option>
+                        <option value={0.65}>0.65 (มาตรฐานสำนักงาน / โคม Linear Batten)</option>
+                        <option value={0.60}>0.60 (โคมดาวน์ไลท์ Downlight 60°)</option>
+                        <option value={0.50}>0.50 (โคมสปอตไลท์ Track Spot / ผนังสีเข้ม)</option>
+                        <option value={0.45}>0.45 (โคม Wall Washer ส่องผนัง)</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <span className="font-bold text-slate-800">Maintenance Factor (MF):</span>
+                      <select
+                        value={mfCoeff}
+                        onChange={e => setMfCoeff(Number(e.target.value))}
+                        className="w-full mt-1 p-1.5 rounded border border-slate-300 bg-white font-mono font-bold text-slate-800 text-xs"
+                      >
+                        <option value={0.85}>0.85 (ห้องสะอาดมาก / ติดตั้งหลอด LED เกรดพรีเมียม)</option>
+                        <option value={0.80}>0.80 (มาตรฐานวิศวกรรมทั่วไป / ฝุ่นละอองปกติ)</option>
+                        <option value={0.75}>0.75 (คลังสินค้า / โรงงาน / ฝุ่นละอองสะสม)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                </div>
+
+                {/* Right Columns: Mode Toggle, Calculations, Spacing & Visual 2D Ceiling Layout (5 cols) */}
+                <div className="lg:col-span-5 space-y-4">
+                  
+                  {/* Mode Selector (AUTO vs MANUAL Fixture Editing) */}
+                  <div className="p-3 bg-slate-900 rounded-2xl border border-slate-800 text-white space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-amber-400 flex items-center gap-1.5">
+                        <Settings2 className="w-4 h-4" />
+                        โหมดกำหนดจำนวนโคมไฟ (Fixture Count Mode):
+                      </span>
+                      <span className="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-mono">
+                        {fixtureCalcMode === 'auto' ? '⚡ AUTO CALC' : '✏️ MANUAL EDIT'}
+                      </span>
+                    </div>
+
+                    {/* Mode Toggle Buttons */}
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setFixtureCalcMode('auto')}
+                        className={`p-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                          fixtureCalcMode === 'auto'
+                            ? 'bg-amber-500 text-slate-950 shadow-xs'
+                            : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white'
+                        }`}
+                      >
+                        <Sparkles className="w-3.5 h-3.5" />
+                        <span>แบบ AUTO ตามระยะ</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFixtureCalcMode('manual');
+                          setManualFixtureRows(autoCalcRows);
+                          setManualFixtureCols(autoCalcCols);
+                        }}
+                        className={`p-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                          fixtureCalcMode === 'manual'
+                            ? 'bg-amber-500 text-slate-950 shadow-xs'
+                            : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white'
+                        }`}
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                        <span>กำหนด / แก้ไขเอง</span>
+                      </button>
+                    </div>
+
+                    {/* Manual Grid Steppers & Sliders */}
+                    {fixtureCalcMode === 'manual' && (
+                      <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-2.5 text-xs">
+                        <div className="text-[11px] text-amber-300 font-bold flex items-center justify-between">
+                          <span>ปรับจำนวนแถวโคมไฟ (Grid Arrangement):</span>
+                          <span className="font-mono text-white">รวม: {manualFixtureCols * manualFixtureRows} โคม</span>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          {/* Cols (Width) */}
+                          <div className="bg-slate-900 p-2.5 rounded-lg border border-slate-800 space-y-1.5">
+                            <div className="flex items-center justify-between text-[11px] text-slate-300">
+                              <span>แนวกว้าง (Cols):</span>
+                              <span className="font-mono font-bold text-amber-400">{manualFixtureCols} แถว</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => setManualFixtureCols(Math.max(1, manualFixtureCols - 1))}
+                                className="w-7 h-7 rounded bg-slate-800 hover:bg-slate-700 text-white font-bold flex items-center justify-center cursor-pointer"
+                              >
+                                -
+                              </button>
+                              <input
+                                type="number"
+                                min={1}
+                                max={20}
+                                value={manualFixtureCols}
+                                onChange={e => setManualFixtureCols(Math.max(1, Number(e.target.value)))}
+                                className="flex-1 p-1 bg-slate-950 text-white font-mono font-bold text-center rounded border border-slate-700 text-xs"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setManualFixtureCols(manualFixtureCols + 1)}
+                                className="w-7 h-7 rounded bg-slate-800 hover:bg-slate-700 text-white font-bold flex items-center justify-center cursor-pointer"
+                              >
+                                +
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Rows (Length) */}
+                          <div className="bg-slate-900 p-2.5 rounded-lg border border-slate-800 space-y-1.5">
+                            <div className="flex items-center justify-between text-[11px] text-slate-300">
+                              <span>แนวยาว (Rows):</span>
+                              <span className="font-mono font-bold text-amber-400">{manualFixtureRows} แถว</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => setManualFixtureRows(Math.max(1, manualFixtureRows - 1))}
+                                className="w-7 h-7 rounded bg-slate-800 hover:bg-slate-700 text-white font-bold flex items-center justify-center cursor-pointer"
+                              >
+                                -
+                              </button>
+                              <input
+                                type="number"
+                                min={1}
+                                max={20}
+                                value={manualFixtureRows}
+                                onChange={e => setManualFixtureRows(Math.max(1, Number(e.target.value)))}
+                                className="flex-1 p-1 bg-slate-950 text-white font-mono font-bold text-center rounded border border-slate-700 text-xs"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setManualFixtureRows(manualFixtureRows + 1)}
+                                className="w-7 h-7 rounded bg-slate-800 hover:bg-slate-700 text-white font-bold flex items-center justify-center cursor-pointer"
+                              >
+                                +
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="text-[10px] text-slate-400">
+                          💡 เมื่อแก้ไขจำนวนโคมไฟ ระบบจะคำนวณค่า Lux ที่ได้จริงและระยะติดตั้ง $S_L, S_W$ ให้โดยอัตโนมัติทันที
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Results Summary Box */}
+                  <div className="bg-gradient-to-br from-slate-900 via-slate-950 to-indigo-950 text-white rounded-2xl p-5 space-y-3.5 shadow-md border border-slate-800">
+                    
+                    <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                      <span className="text-[11px] text-amber-400 font-bold uppercase tracking-wider flex items-center gap-1">
+                        <Sparkles className="w-3.5 h-3.5" />
+                        ผลการคำนวณแสงสว่างและระยะติดตั้ง
+                      </span>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 font-mono">
+                        Room Index K = {roomIndexK.toFixed(2)}
+                      </span>
+                    </div>
+
+                    {/* Fixture Count Recommendation */}
+                    <div className="flex items-center justify-between bg-slate-800/80 p-3 rounded-xl border border-slate-700">
+                      <div>
+                        <div className="text-xs text-slate-300 font-medium">
+                          {fixtureCalcMode === 'auto' ? 'จำนวนโคมไฟแนะนำ (AUTO):' : 'จำนวนโคมไฟที่กำหนด (MANUAL):'}
+                        </div>
+                        <div className="text-[11px] text-slate-400">
+                          จัดวาง {effectiveCols} แถว (กว้าง) × {effectiveRows} แถว (ยาว)
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-2xl font-black text-amber-400 font-mono">
+                          {gridFixtureCount}
+                        </span>
+                        <span className="text-xs text-slate-300 ml-1 font-bold">โคม</span>
+                        <div className="text-[10px] text-slate-400">
+                          (คำนวณเป้าหมาย: {exactFixtureCount.toFixed(2)} โคม)
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Actual Lux & Target Lux Comparison */}
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div className="p-2.5 rounded-xl bg-slate-800/60 border border-slate-700/80">
+                        <div className="text-[11px] text-slate-400">ความสว่างจริงที่ได้รับ:</div>
+                        <div className="font-mono font-black text-lg text-emerald-400">
+                          {Math.round(actualCalculatedLux)} <span className="text-xs text-slate-300">Lux</span>
+                        </div>
+                        <div className="text-[10px] text-slate-400">
+                          {luxDifferencePercent >= 0 ? `+${luxDifferencePercent.toFixed(1)}% จากเป้าหมาย` : `${luxDifferencePercent.toFixed(1)}% จากเป้าหมาย`}
+                        </div>
+                      </div>
+
+                      <div className="p-2.5 rounded-xl bg-slate-800/60 border border-slate-700/80">
+                        <div className="text-[11px] text-slate-400">ลูเมนรวมทั้งห้อง:</div>
+                        <div className="font-mono font-bold text-base text-amber-300">
+                          {Math.round(gridFixtureCount * fixtureLumens).toLocaleString()} <span className="text-xs text-slate-400">lm</span>
+                        </div>
+                        <div className="text-[10px] text-slate-400">
+                          ต้องการขั้นต่ำ: {Math.round(totalRequiredLumens).toLocaleString()} lm
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Fixture Spacing Breakdown (ระยะการติดโคมไฟเบื้องต้น) */}
+                    <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 space-y-2 text-xs">
+                      <div className="text-[11px] font-bold text-amber-300 flex items-center justify-between">
+                        <span>📐 ระยะการติดโคมไฟเบื้องต้น (Fixture Spacing):</span>
+                        <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${
+                          isSpacingUniform 
+                            ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
+                            : isSpacingAcceptable
+                            ? 'bg-amber-950 text-amber-300 border border-amber-800'
+                            : 'bg-rose-950 text-rose-300 border border-rose-800'
+                        }`}>
+                          SHR: {spacingToHeightRatio.toFixed(2)} {isSpacingUniform ? '(แสงสม่ำเสมอดีเยี่ยม)' : isSpacingAcceptable ? '(พอใช้)' : '(โคมห่างเกินไป)'}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 text-[11px]">
+                        <div className="bg-slate-900 p-2 rounded border border-slate-800">
+                          <div className="text-slate-400">ระยะห่างตามแนวยาว (Length):</div>
+                          <div className="font-mono font-bold text-white text-xs">
+                            {spacingLength.toFixed(2)} ม.
+                          </div>
+                          <div className="text-[10px] text-slate-500">
+                            (ผนังถึงโคมแรก: {wallSpacingLength.toFixed(2)} ม.)
+                          </div>
+                        </div>
+
+                        <div className="bg-slate-900 p-2 rounded border border-slate-800">
+                          <div className="text-slate-400">ระยะห่างตามแนวกว้าง (Width):</div>
+                          <div className="font-mono font-bold text-white text-xs">
+                            {spacingWidth.toFixed(2)} ม.
+                          </div>
+                          <div className="text-[10px] text-slate-500">
+                            (ผนังถึงโคมแรก: {wallSpacingWidth.toFixed(2)} ม.)
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Total Watts & Lighting Power Density (LPD) */}
+                    <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-800">
+                      <div>
+                        <span className="text-slate-400">กำลังไฟฟ้ารวมทั้งห้อง: </span>
+                        <span className="font-mono font-bold text-white">{totalLightingWatts} Watts</span>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-slate-400">LPD: </span>
+                        <span className={`font-mono font-bold ${isLpdCompliant ? 'text-emerald-400' : 'text-amber-400'}`}>
+                          {lightingPowerDensity.toFixed(2)} W/m²
+                        </span>
+                        <span className="text-[10px] text-slate-400 ml-1">
+                          {isLpdCompliant ? '(✅ ประหยัดพลังงาน)' : '(⚠️ สูงกว่าเกณฑ์)'}
+                        </span>
+                      </div>
+                    </div>
+
+                  </div>
+
+                  {/* 2D Ceiling Layout Preview Visualizer */}
+                  <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 text-white space-y-2">
+                    <div className="flex items-center justify-between text-[11px] font-bold text-slate-300">
+                      <span className="flex items-center gap-1.5 text-amber-400">
+                        <LayoutGrid className="w-3.5 h-3.5" />
+                        ผังจำลองตำแหน่งโคมบนฝ้าเพดาน (2D Ceiling Plan)
+                      </span>
+                      <span className="text-[10px] text-slate-500 font-mono">
+                        {effectiveCols} × {effectiveRows} = {gridFixtureCount} โคม
+                      </span>
+                    </div>
+
+                    {/* SVG Top-Down View */}
+                    <div className="relative w-full h-40 bg-slate-900 rounded-xl border border-slate-800 overflow-hidden flex items-center justify-center p-3">
+                      <svg 
+                        viewBox={`0 0 ${roomLength * 20 + 40} ${roomWidth * 20 + 40}`} 
+                        className="w-full h-full max-h-36 drop-shadow-md"
+                      >
+                        {/* Room Perimeter */}
+                        <rect
+                          x="20"
+                          y="20"
+                          width={roomLength * 20}
+                          height={roomWidth * 20}
+                          fill="#0f172a"
+                          stroke="#475569"
+                          strokeWidth="2"
+                          rx="4"
+                        />
+
+                        {/* Grid Guides */}
+                        {Array.from({ length: effectiveRows }).map((_, rIdx) => {
+                          const cx = 20 + (rIdx + 0.5) * (spacingLength * 20);
+                          return (
+                            <line
+                              key={`v-${rIdx}`}
+                              x1={cx}
+                              y1="20"
+                              x2={cx}
+                              y2={20 + roomWidth * 20}
+                              stroke="#1e293b"
+                              strokeDasharray="2,2"
+                            />
+                          );
+                        })}
+
+                        {Array.from({ length: effectiveCols }).map((_, cIdx) => {
+                          const cy = 20 + (cIdx + 0.5) * (spacingWidth * 20);
+                          return (
+                            <line
+                              key={`h-${cIdx}`}
+                              x1="20"
+                              y1={cy}
+                              x2={20 + roomLength * 20}
+                              y2={cy}
+                              stroke="#1e293b"
+                              strokeDasharray="2,2"
+                            />
+                          );
+                        })}
+
+                        {/* Fixture Nodes (Luminaires) */}
+                        {Array.from({ length: effectiveRows }).flatMap((_, rIdx) =>
+                          Array.from({ length: effectiveCols }).map((_, cIdx) => {
+                            const cx = 20 + (rIdx + 0.5) * (spacingLength * 20);
+                            const cy = 20 + (cIdx + 0.5) * (spacingWidth * 20);
+                            return (
+                              <g key={`fixture-${rIdx}-${cIdx}`}>
+                                {/* Glow Circle */}
+                                <circle
+                                  cx={cx}
+                                  cy={cy}
+                                  r={Math.min(14, spacingWidth * 4)}
+                                  fill="rgba(245, 158, 11, 0.15)"
+                                />
+                                {/* Fixture Core */}
+                                <circle
+                                  cx={cx}
+                                  cy={cy}
+                                  r="4.5"
+                                  fill="#f59e0b"
+                                  stroke="#ffffff"
+                                  strokeWidth="1.5"
+                                />
+                              </g>
+                            );
+                          })
+                        )}
+
+                        {/* Length Dimension Label */}
+                        <text
+                          x={20 + (roomLength * 20) / 2}
+                          y="14"
+                          fill="#94a3b8"
+                          fontSize="9"
+                          textAnchor="middle"
+                          fontFamily="monospace"
+                        >
+                          ยาว L = {roomLength}m
+                        </text>
+
+                        {/* Width Dimension Label */}
+                        <text
+                          x="10"
+                          y={20 + (roomWidth * 20) / 2}
+                          fill="#94a3b8"
+                          fontSize="9"
+                          textAnchor="middle"
+                          fontFamily="monospace"
+                          transform={`rotate(-90 10 ${20 + (roomWidth * 20) / 2})`}
+                        >
+                          กว้าง W = {roomWidth}m
+                        </text>
+                      </svg>
+                    </div>
+
+                    <div className="flex items-center justify-between text-[10px] text-slate-400 px-1">
+                      <span className="flex items-center gap-1">
+                        <span className="w-2 h-2 rounded-full bg-amber-500 inline-block"></span>
+                        ตำแหน่งจุดติดตั้งโคมไฟ ({effectiveCols} × {effectiveRows})
+                      </span>
+                      <span>H_โคม = {roomHeight}m (ระยะระนาบงาน = {effectiveHeight.toFixed(2)}m)</span>
+                    </div>
+                  </div>
+
+                </div>
+
               </div>
             </div>
+          )}
 
-            <div className="space-y-3.5 text-xs">
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  1. โหลดกำลังวัตต์ปลายทาง (Watts):
-                </label>
-                <input
-                  type="number"
-                  min={5}
-                  max={500}
-                  value={calcLoadWatts}
-                  onChange={e => setCalcLoadWatts(Number(e.target.value))}
-                  className="w-full p-2 rounded-lg border border-slate-300 font-bold font-mono"
-                />
-              </div>
+          {/* ================= 2. DC CURRENT & WATTAGE CALCULATOR (WITH MULTI-LOADS) ================= */}
+          {(calcActiveSubTab === 'all' || calcActiveSubTab === 'dc_current') && (
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+                <div className="flex items-center space-x-3">
+                  <div className="p-3 rounded-2xl bg-amber-100 text-amber-800">
+                    <Zap className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900">
+                      2. เครื่องคำนวณกำลังวัตต์ (Watt) และกระแสไฟฟ้าตรง DC (DC Current & Loads)
+                    </h3>
+                    <p className="text-xs text-slate-500">
+                      คำนวณกำลังวัตต์โหลด DC แต่ละรายการ, กระแสรวม (A), ขนาดหม้อแปลง Switching และขนาดสายไฟทองแดง DC
+                    </p>
+                  </div>
+                </div>
 
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  2. ระยะทางจากหม้อแปลงถึงจุดไฟ (เมตร):
-                </label>
-                <div className="flex items-center gap-3">
-                  <input
-                    type="range"
-                    min={1}
-                    max={60}
-                    value={calcCableLength}
-                    onChange={e => setCalcCableLength(Number(e.target.value))}
-                    className="flex-1 accent-blue-600"
-                  />
-                  <span className="w-16 px-2 py-1 rounded-lg bg-slate-100 border border-slate-300 font-bold font-mono text-center">
-                    {calcCableLength} m
-                  </span>
+                {/* Switch between Multi-load and Single Wattage input */}
+                <div className="flex items-center gap-2 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setDcUseItemized(true)}
+                    className={`px-3 py-1.5 rounded-lg font-bold border transition cursor-pointer ${
+                      dcUseItemized
+                        ? 'bg-amber-500 text-slate-950 border-amber-600 shadow-xs'
+                        : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
+                    }`}
+                  >
+                    📦 รวมโหลดอุปกรณ์ DC หลายรายการ ({dcLoadItems.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDcUseItemized(false)}
+                    className={`px-3 py-1.5 rounded-lg font-bold border transition cursor-pointer ${
+                      !dcUseItemized
+                        ? 'bg-amber-500 text-slate-950 border-amber-600 shadow-xs'
+                        : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
+                    }`}
+                  >
+                    ⚡ ระบุวัตต์รวมตรง
+                  </button>
                 </div>
               </div>
 
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  3. ขนาดสายไฟทองแดง (sq.mm.):
-                </label>
-                <div className="grid grid-cols-4 gap-2">
-                  {[1.0, 1.5, 2.5, 4.0].map(s => (
-                    <button
-                      key={s}
-                      type="button"
-                      onClick={() => setCalcCableSize(s)}
-                      className={`p-2 rounded-xl text-xs font-bold border transition ${
-                        calcCableSize === s
-                          ? 'bg-blue-600 text-white border-blue-700 shadow-xs'
-                          : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-                      }`}
-                    >
-                      {s} sq.mm.
-                    </button>
-                  ))}
-                </div>
-              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs">
+                
+                {/* Inputs: Multi-load items or manual watts */}
+                <div className="space-y-4">
+                  
+                  {dcUseItemized ? (
+                    <div className="space-y-2.5">
+                      <div className="flex items-center justify-between font-bold text-slate-800">
+                        <span>รายการโหลดอุปกรณ์ไฟฟ้า DC (DC Load Items):</span>
+                        <span className="font-mono text-amber-600 font-bold bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                          รวม: {totalDcItemsWatts} W
+                        </span>
+                      </div>
 
-              <div className={`p-4 rounded-xl text-white space-y-2 shadow-inner ${
-                isVoltageDropSafe ? 'bg-slate-900' : 'bg-rose-950'
-              }`}>
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-slate-300">แรงดันตกในสาย (V_drop):</span>
-                  <span className="font-mono font-bold text-white text-sm">
-                    {voltageDropVolts.toFixed(2)} V ({voltageDropPercent.toFixed(1)}%)
-                  </span>
-                </div>
-                <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-800">
-                  <span className="text-slate-300 font-bold">แรงดันปลายสายที่ไฟเส้นได้รับ:</span>
-                  <span className={`font-mono font-black text-base ${isVoltageDropSafe ? 'text-emerald-400' : 'text-rose-400'}`}>
-                    {voltageAtEnd.toFixed(2)} VDC
-                  </span>
-                </div>
-                <div className={`p-2 rounded border text-[11px] ${
-                  isVoltageDropSafe
-                    ? 'bg-emerald-950/60 border-emerald-700 text-emerald-300'
-                    : 'bg-rose-900/60 border-rose-700 text-rose-200'
-                }`}>
-                  {isVoltageDropSafe ? (
-                    <span>✅ ผ่านมาตรฐาน: แรงดันตกไม่เกิน 8% แสงสว่างสม่ำเสมอ ไม่ดรอป</span>
+                      {/* Item List */}
+                      <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
+                        {dcLoadItems.map((item, idx) => (
+                          <div key={item.id} className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-200">
+                            <div className="flex-1 pr-2">
+                              <div className="font-bold text-slate-900 text-xs">{item.name}</div>
+                              <div className="text-[10px] text-slate-500">
+                                {item.watts}W × {item.qty} ชิ้น = <strong>{item.watts * item.qty} Watts</strong>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setDcLoadItems(dcLoadItems.filter(it => it.id !== item.id))}
+                              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                              title="ลบรายการ"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Add Item Row */}
+                      <div className="p-2.5 rounded-xl bg-amber-50/60 border border-amber-200/80 space-y-2">
+                        <div className="font-bold text-amber-900 text-[11px] flex items-center gap-1">
+                          <Plus className="w-3.5 h-3.5" />
+                          เพิ่มโหลด DC ใหม่:
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-12 gap-1.5">
+                          <input
+                            type="text"
+                            placeholder="ชื่อโหลด (เช่น Neon Flex 10m)"
+                            value={newDcItemName}
+                            onChange={e => setNewDcItemName(e.target.value)}
+                            className="sm:col-span-6 p-1.5 rounded-lg border border-slate-300 bg-white text-xs"
+                          />
+                          <input
+                            type="number"
+                            placeholder="วัตต์ (W)"
+                            value={newDcItemWatts}
+                            onChange={e => setNewDcItemWatts(Number(e.target.value))}
+                            className="sm:col-span-3 p-1.5 rounded-lg border border-slate-300 bg-white font-mono text-center text-xs"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!newDcItemName.trim()) return;
+                              setDcLoadItems([
+                                ...dcLoadItems,
+                                {
+                                  id: String(Date.now()),
+                                  name: newDcItemName.trim(),
+                                  watts: Number(newDcItemWatts) || 10,
+                                  qty: 1
+                                }
+                              ]);
+                              setNewDcItemName('');
+                              setNewDcItemWatts(50);
+                            }}
+                            className="sm:col-span-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs cursor-pointer shadow-xs"
+                          >
+                            + เพิ่ม
+                          </button>
+                        </div>
+                      </div>
+                    </div>
                   ) : (
-                    <span>⚠️ เกินเกณฑ์มาตรฐาน! แนะนำเพิ่มขนาดสายไฟเป็น 4.0 sq.mm. หรือขยับหม้อแปลงเข้าใกล้หน้างาน</span>
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">
+                        1. โหลดกำลังวัตต์ DC รวมทั้งหมด (Total Watts):
+                      </label>
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="range"
+                          min={5}
+                          max={2000}
+                          step={5}
+                          value={dcManualWatts}
+                          onChange={e => setDcManualWatts(Number(e.target.value))}
+                          className="flex-1 accent-amber-500 cursor-pointer"
+                        />
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="number"
+                            min={1}
+                            max={10000}
+                            value={dcManualWatts}
+                            onChange={e => setDcManualWatts(Number(e.target.value))}
+                            className="w-20 p-1.5 rounded-lg border border-slate-300 font-mono font-bold text-center"
+                          />
+                          <span className="font-bold text-slate-600">W</span>
+                        </div>
+                      </div>
+                    </div>
                   )}
+
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">
+                      2. แรงดันไฟฟ้ากระแสตรง (DC Voltage):
+                    </label>
+                    <div className="grid grid-cols-5 gap-1.5">
+                      {[5, 12, 24, 36, 48].map(v => (
+                        <button
+                          key={v}
+                          type="button"
+                          onClick={() => setDcInputVoltage(v)}
+                          className={`py-2 rounded-xl text-xs font-bold border transition cursor-pointer ${
+                            dcInputVoltage === v
+                              ? 'bg-slate-900 text-amber-400 border-slate-900 shadow-xs'
+                              : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                          }`}
+                        >
+                          {v} VDC
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">
+                      3. กฎความปลอดภัย Safety Derating Factor:
+                    </label>
+                    <select
+                      value={dcDeratingFactor}
+                      onChange={e => setDcDeratingFactor(Number(e.target.value))}
+                      className="w-full p-2 rounded-xl border border-slate-300 bg-white font-semibold text-slate-800"
+                    >
+                      <option value={0.80}>80% Derating (มาตรฐาน LUMENCRAFT - วิ่งต่อเนื่อง 24 ชม.)</option>
+                      <option value={0.70}>70% Derating (ตู้ควบคุมปิดทึบ / อุณหภูมิหน้างานสูง 45°C)</option>
+                      <option value={0.85}>85% Derating (ห้องปรับอากาศ / ระบายความร้อนดีเยี่ยม)</option>
+                    </select>
+                  </div>
                 </div>
+
+                {/* Outputs Card */}
+                <div className="p-4 rounded-2xl bg-gradient-to-br from-slate-900 to-slate-950 text-white space-y-3 shadow-inner">
+                  <div className="text-[11px] text-amber-400 font-bold uppercase tracking-wider border-b border-slate-800 pb-1.5 flex items-center justify-between">
+                    <span>ผลลัพธ์การคำนวณระบบไฟฟ้ากระแสตรง (DC Results)</span>
+                    <span className="font-mono text-slate-300">P_DC = {effectiveDcWatts}W @ {dcInputVoltage}V</span>
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-slate-300">กระแสไฟฟ้าใช้งานจริง (I_DC = P / V):</span>
+                    <span className="font-mono font-bold text-amber-300 text-sm">{dcCurrentAmp.toFixed(2)} A (แอมป์)</span>
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-slate-300">กระแสเผื่อ Safety Margin (80% Rule):</span>
+                    <span className="font-mono font-bold text-white">{dcRatedAmpSafety.toFixed(2)} A</span>
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs pt-1.5 border-t border-slate-800">
+                    <span className="text-amber-300 font-bold">ขนาดหม้อแปลง Switching ขั้นต่ำ:</span>
+                    <span className="font-mono font-black text-amber-400 text-base">{dcRecommendedPsuWatts} Watts</span>
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-800">
+                    <span className="text-slate-300">ขนาดสายไฟ DC ทองแดงแนะนำ:</span>
+                    <span className="font-mono font-bold text-emerald-400">{dcRecommendedCable}</span>
+                  </div>
+
+                  <div className="text-[11px] text-slate-300 bg-slate-800/90 p-2.5 rounded-xl border border-slate-700">
+                    💡 คำแนะนำวิศวกร: หากระยะสาย DC เกิน 15 เมตร แนะนำให้เพิ่มขนาดสายไฟเป็น 2.5–4.0 sq.mm. หรือต่อสายไฟเลี้ยงหัว-ท้าย (Double Feed) เพื่อป้องกันแรงดันตก
+                  </div>
+                </div>
+
               </div>
             </div>
-          </div>
+          )}
+
+          {/* ================= 3. AC CURRENT & BREAKER CALCULATOR (WITH DC LOAD LINK) ================= */}
+          {(calcActiveSubTab === 'all' || calcActiveSubTab === 'ac_current') && (
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-4">
+              <div className="flex items-center space-x-3 border-b border-slate-100 pb-3">
+                <div className="p-3 rounded-2xl bg-indigo-100 text-indigo-800">
+                  <Gauge className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">
+                    3. เครื่องคำนวณกำลังวัตต์ (Watt) และกระแสไฟฟ้าสลับ AC (AC Current & Breaker with DC Loads)
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    คำนวณกระแสไฟฟ้า AC 1-Phase / 3-Phase, รวมโหลดหม้อแปลง DC, กำลังไฟฟ้าปรากฏ (VA), ขนาดเบรกเกอร์ MCB และสายไฟ วสท.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs">
+                
+                {/* Inputs */}
+                <div className="space-y-3.5">
+                  
+                  {/* System Phase Selection */}
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">
+                      1. เลือกระบบไฟฟ้า AC:
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setAcPhaseType('1_phase')}
+                        className={`p-2.5 rounded-xl text-xs font-bold border transition cursor-pointer flex items-center justify-center gap-2 ${
+                          acPhaseType === '1_phase'
+                            ? 'bg-indigo-600 text-white border-indigo-700 shadow-xs'
+                            : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        <span>1 Phase (220V - 230V)</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setAcPhaseType('3_phase')}
+                        className={`p-2.5 rounded-xl text-xs font-bold border transition cursor-pointer flex items-center justify-center gap-2 ${
+                          acPhaseType === '3_phase'
+                            ? 'bg-indigo-600 text-white border-indigo-700 shadow-xs'
+                            : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        <span>3 Phase (380V - 400V)</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Direct AC Luminaire Load */}
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">
+                      2. โหลดกำลังวัตต์ AC ตรง (Direct AC Luminaires / Equipment):
+                    </label>
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="range"
+                        min={0}
+                        max={10000}
+                        step={50}
+                        value={acDirectWatts}
+                        onChange={e => setAcDirectWatts(Number(e.target.value))}
+                        className="flex-1 accent-indigo-600 cursor-pointer"
+                      />
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="number"
+                          min={0}
+                          max={50000}
+                          value={acDirectWatts}
+                          onChange={e => setAcDirectWatts(Number(e.target.value))}
+                          className="w-20 p-1.5 rounded-lg border border-slate-300 font-mono font-bold text-center"
+                        />
+                        <span className="font-bold text-slate-600">W</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* DC Load Integration Checkbox */}
+                  <div className="p-3 rounded-xl bg-indigo-50/70 border border-indigo-200/80 space-y-2">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={acIncludeDcLoad}
+                        onChange={e => setAcIncludeDcLoad(e.target.checked)}
+                        className="w-4 h-4 rounded text-indigo-600 accent-indigo-600 cursor-pointer"
+                      />
+                      <span className="font-bold text-indigo-950 text-xs">
+                        ⚡ รวมโหลดกำลังวัตต์ DC จากหม้อแปลง Switching เข้าในวงจร AC นี้ด้วย
+                      </span>
+                    </label>
+
+                    {acIncludeDcLoad && (
+                      <div className="pl-6 text-[11px] text-indigo-900 space-y-1">
+                        <div>
+                          โหลด DC รวม: <strong>{effectiveDcWatts}W</strong> แปลงเป็น AC Input: <strong>{Math.round(dcInputWattsFromAc)}W</strong> (คำนวณผ่าน Driver Eff η = {acEfficiency})
+                        </div>
+                        <div className="font-bold text-slate-900">
+                          = กำลังวัตต์ AC สุทธิรวมทั้งระบบ: <span className="font-mono text-indigo-700 text-xs">{Math.round(totalAcCombinedWatts)} Watts</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* AC Voltage, PF & Efficiency */}
+                  <div className="grid grid-cols-3 gap-2">
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">
+                        แรงดัน (V):
+                      </label>
+                      <input
+                        type="number"
+                        value={acPhaseType === '1_phase' ? acVoltage1P : acVoltage3P}
+                        onChange={e => {
+                          if (acPhaseType === '1_phase') setAcVoltage1P(Number(e.target.value));
+                          else setAcVoltage3P(Number(e.target.value));
+                        }}
+                        className="w-full p-2 rounded-lg border border-slate-300 font-mono font-bold text-center"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">
+                        Power Factor:
+                      </label>
+                      <input
+                        type="number"
+                        min={0.6}
+                        max={1.0}
+                        step={0.01}
+                        value={acPowerFactor}
+                        onChange={e => setAcPowerFactor(Number(e.target.value))}
+                        className="w-full p-2 rounded-lg border border-slate-300 font-mono font-bold text-center"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">
+                        Driver Eff (η):
+                      </label>
+                      <input
+                        type="number"
+                        min={0.7}
+                        max={0.99}
+                        step={0.01}
+                        value={acEfficiency}
+                        onChange={e => setAcEfficiency(Number(e.target.value))}
+                        className="w-full p-2 rounded-lg border border-slate-300 font-mono font-bold text-center"
+                      />
+                    </div>
+                  </div>
+
+                </div>
+
+                {/* Outputs Card */}
+                <div className="p-4 rounded-2xl bg-gradient-to-br from-slate-900 to-slate-950 text-white space-y-3 shadow-inner">
+                  <div className="text-[11px] text-indigo-400 font-bold uppercase tracking-wider border-b border-slate-800 pb-1.5 flex items-center justify-between">
+                    <span>ผลลัพธ์การคำนวณระบบไฟฟ้ากระแสสลับ ({acPhaseType === '1_phase' ? '1-Phase 230V' : '3-Phase 400V'})</span>
+                    <span className="font-mono text-amber-400 font-bold">{Math.round(totalAcCombinedWatts)} W</span>
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-slate-300">กระแสไฟฟ้าไหลในสาย (I_AC):</span>
+                    <span className="font-mono font-bold text-amber-300 text-sm">
+                      {acCurrentAmp.toFixed(2)} A {acPhaseType === '3_phase' ? '/ เฟส' : ''}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-slate-300">กำลังไฟฟ้าปรากฏ (Apparent Power):</span>
+                    <span className="font-mono font-bold text-white">{Math.round(acApparentPowerVA).toLocaleString()} VA</span>
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-slate-300">กระแสเผื่อโหลดต่อเนื่อง 125% (Continuous Load):</span>
+                    <span className="font-mono font-bold text-slate-300">{acContinuousLoadAmp.toFixed(2)} A</span>
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs pt-1.5 border-t border-slate-800">
+                    <span className="text-indigo-300 font-bold">พิกัดเบรกเกอร์ลูกย่อยแนะนำ (MCB):</span>
+                    <span className="font-mono font-black text-amber-400 text-base">{recommendedMCB} A ({acPhaseType === '1_phase' ? '1P' : '3P'})</span>
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-800">
+                    <span className="text-slate-300">ขนาดสายไฟ AC ทองแดงแนะนำ (วสท.):</span>
+                    <span className="font-mono font-bold text-emerald-400">{acRecommendedCable}</span>
+                  </div>
+
+                  <div className="text-[11px] text-slate-300 bg-slate-800/90 p-2 rounded-xl border border-slate-700">
+                    📋 สูตรอ้างอิง: {acPhaseType === '1_phase' ? 'I = P_Total / (V × PF)' : 'I = P_Total / (√3 × V_LL × PF)'} โดยรวมกำลังสูญเสียในไดรเวอร์ DC ครบถ้วนตามหลักวิศวกรรมไฟฟ้า
+                  </div>
+                </div>
+
+              </div>
+            </div>
+          )}
+
+          {/* ================= 4 & 5. EXISTING LED STRIP & VOLTAGE DROP CALCULATORS ================= */}
+          {(calcActiveSubTab === 'all' || calcActiveSubTab === 'switching' || calcActiveSubTab === 'voltage_drop') && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              
+              {/* 4. Switching Wattage & Derating Calculator */}
+              {(calcActiveSubTab === 'all' || calcActiveSubTab === 'switching') && (
+                <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-4">
+                  <div className="flex items-center space-x-3 border-b border-slate-100 pb-3">
+                    <div className="p-2.5 rounded-xl bg-amber-100 text-amber-800">
+                      <Sliders className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-bold text-slate-900">
+                        4. เครื่องคำนวณขนาดหม้อแปลง LED Strip 12V/24V
+                      </h3>
+                      <p className="text-xs text-slate-500">
+                        คำนวณวัตต์รวมและเผื่อ Safety Factor (Derating 80% Rule)
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3.5 text-xs">
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">
+                        1. ความยาวไฟเส้น LED Strip ทั้งหมด (เมตร):
+                      </label>
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="range"
+                          min={1}
+                          max={100}
+                          step={0.5}
+                          value={calcStripLength}
+                          onChange={e => setCalcStripLength(Number(e.target.value))}
+                          className="flex-1 accent-amber-600"
+                        />
+                        <span className="w-16 px-2 py-1 rounded-lg bg-slate-100 border border-slate-300 font-bold font-mono text-center">
+                          {calcStripLength} m
+                        </span>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">
+                        2. กำลังวัตต์ต่อเมตรของไฟเส้น (Watt/Meter):
+                      </label>
+                      <div className="grid grid-cols-4 gap-2">
+                        {[4.8, 9.6, 14.4, 19.2].map(w => (
+                          <button
+                            key={w}
+                            type="button"
+                            onClick={() => setCalcWattPerMeter(w)}
+                            className={`p-2 rounded-xl text-xs font-bold border transition ${
+                              calcWattPerMeter === w
+                                ? 'bg-amber-500 text-slate-950 border-amber-600 shadow-xs'
+                                : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                            }`}
+                          >
+                            {w} W/m
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">
+                        3. กฎความปลอดภัย Safety Derating Factor:
+                      </label>
+                      <select
+                        value={calcSafetyFactor}
+                        onChange={e => setCalcSafetyFactor(Number(e.target.value))}
+                        className="w-full p-2 rounded-lg border border-slate-300 bg-white font-semibold text-slate-800"
+                      >
+                        <option value={0.8}>80% Derating (มาตรฐานวิศวกรรม LUMENCRAFT)</option>
+                        <option value={0.7}>70% Derating (พื้นที่อุณหภูมิสูง / กล่องปิดทึบ)</option>
+                        <option value={0.85}>85% Derating (ติดตั้งในที่เปิดโล่ง ถ่ายเทดี)</option>
+                      </select>
+                    </div>
+
+                    <div className="p-4 rounded-xl bg-gradient-to-br from-slate-900 to-slate-950 text-white space-y-2 shadow-inner">
+                      <div className="text-[11px] text-amber-400 font-bold uppercase tracking-wider">
+                        ผลลัพธ์การคำนวณหม้อแปลง
+                      </div>
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-slate-300">โหลดวัตต์รวมหน้างาน:</span>
+                        <span className="font-mono font-bold text-white text-sm">{totalStripWatts.toFixed(1)} Watts</span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-800">
+                        <span className="text-amber-300 font-bold">ขนาดหม้อแปลงขั้นต่ำที่ต้องเลือก:</span>
+                        <span className="font-mono font-black text-amber-400 text-base">{Math.ceil(recommendedPsuWatts)} Watts</span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs text-slate-400">
+                        <span>กระแสไฟ 24VDC:</span>
+                        <span className="font-mono font-bold text-white">~{currentAmp24V.toFixed(2)} A</span>
+                      </div>
+                      <div className="text-[11px] text-slate-300 bg-slate-800/80 p-2 rounded border border-slate-700">
+                        💡 รุ่นหม้อแปลงแนะนำ: <strong>{Math.ceil(recommendedPsuWatts) <= 100 ? '100W/150W 24V' : Math.ceil(recommendedPsuWatts) <= 200 ? '200W/240W 24V' : Math.ceil(recommendedPsuWatts) <= 350 ? '350W 24V' : 'แยกวงจรหม้อแปลง 2 ตัว'}</strong>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 5. Voltage Drop Calculator */}
+              {(calcActiveSubTab === 'all' || calcActiveSubTab === 'voltage_drop') && (
+                <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-4">
+                  <div className="flex items-center space-x-3 border-b border-slate-100 pb-3">
+                    <div className="p-2.5 rounded-xl bg-blue-100 text-blue-800">
+                      <Cable className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-bold text-slate-900">
+                        5. เครื่องคำนวณแรงดันตกสาย 24V (Voltage Drop)
+                      </h3>
+                      <p className="text-xs text-slate-500">
+                        ตรวจสอบระยะสายไฟและขนาดสายทองแดงไม่ให้แสงดรอป
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3.5 text-xs">
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">
+                        1. โหลดกำลังวัตต์ปลายทาง (Watts):
+                      </label>
+                      <input
+                        type="number"
+                        min={5}
+                        max={500}
+                        value={calcLoadWatts}
+                        onChange={e => setCalcLoadWatts(Number(e.target.value))}
+                        className="w-full p-2 rounded-lg border border-slate-300 font-bold font-mono"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">
+                        2. ระยะทางจากหม้อแปลงถึงจุดไฟ (เมตร):
+                      </label>
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="range"
+                          min={1}
+                          max={60}
+                          value={calcCableLength}
+                          onChange={e => setCalcCableLength(Number(e.target.value))}
+                          className="flex-1 accent-blue-600"
+                        />
+                        <span className="w-16 px-2 py-1 rounded-lg bg-slate-100 border border-slate-300 font-bold font-mono text-center">
+                          {calcCableLength} m
+                        </span>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">
+                        3. ขนาดสายไฟทองแดง (sq.mm.):
+                      </label>
+                      <div className="grid grid-cols-4 gap-2">
+                        {[1.0, 1.5, 2.5, 4.0].map(s => (
+                          <button
+                            key={s}
+                            type="button"
+                            onClick={() => setCalcCableSize(s)}
+                            className={`p-2 rounded-xl text-xs font-bold border transition ${
+                              calcCableSize === s
+                                ? 'bg-blue-600 text-white border-blue-700 shadow-xs'
+                                : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                            }`}
+                          >
+                            {s} sq.mm.
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className={`p-4 rounded-xl text-white space-y-2 shadow-inner ${
+                      isVoltageDropSafe ? 'bg-slate-900' : 'bg-rose-950'
+                    }`}>
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-slate-300">แรงดันตกในสาย (V_drop):</span>
+                        <span className="font-mono font-bold text-white text-sm">
+                          {voltageDropVolts.toFixed(2)} V ({voltageDropPercent.toFixed(1)}%)
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-800">
+                        <span className="text-slate-300 font-bold">แรงดันปลายสายที่ไฟเส้นได้รับ:</span>
+                        <span className={`font-mono font-black text-base ${isVoltageDropSafe ? 'text-emerald-400' : 'text-rose-400'}`}>
+                          {voltageAtEnd.toFixed(2)} VDC
+                        </span>
+                      </div>
+                      <div className={`p-2 rounded border text-[11px] ${
+                        isVoltageDropSafe
+                          ? 'bg-emerald-950/60 border-emerald-700 text-emerald-300'
+                          : 'bg-rose-900/60 border-rose-700 text-rose-200'
+                      }`}>
+                        {isVoltageDropSafe ? (
+                          <span>✅ ผ่านมาตรฐาน: แรงดันตกไม่เกิน 8% แสงสว่างสม่ำเสมอ ไม่ดรอป</span>
+                        ) : (
+                          <span>⚠️ เกินเกณฑ์มาตรฐาน! แนะนำเพิ่มขนาดสายไฟเป็น 4.0 sq.mm. หรือขยับหม้อแปลงเข้าใกล้หน้างาน</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+            </div>
+          )}
 
         </div>
       )}
