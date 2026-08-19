@@ -367,69 +367,77 @@ export const FileViewerModal: React.FC<FileViewerModalProps> = ({
       {/* ======================================================== */}
       {/* 4. PRINT FORMATTED PAGE (Visible ONLY when window.print() is called) */}
       {/* ======================================================== */}
-      <div className="hidden print:block p-8 bg-white text-slate-900 font-sans max-w-4xl mx-auto w-full">
-        {/* Printable Official Header */}
-        <div className="border-b-2 border-slate-900 pb-3 flex items-start justify-between">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="px-2 py-0.5 rounded bg-slate-900 text-amber-400 font-black text-sm tracking-wider">
-                LUMENCRAFT
-              </span>
-              <span className="font-bold text-sm text-slate-900">
-                ระบบ E-Request LUMENCRAFT — เอกสารแนบ (ATTACHMENT FILE)
-              </span>
+      <div className="hidden print:block a4-print-container bg-white text-slate-900 font-sans w-full">
+        <div className="a4-page-sheet p-8 bg-white flex flex-col justify-between min-h-[280mm] box-border">
+          
+          <div className="space-y-4">
+            {/* Printable Official Header */}
+            <div className="border-b-2 border-slate-900 pb-3 flex items-start justify-between">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="px-2.5 py-1 rounded bg-slate-900 text-amber-400 font-black text-sm tracking-wider">
+                    LUMENCRAFT
+                  </span>
+                  <span className="font-extrabold text-sm text-slate-900 uppercase">
+                    ระบบ E-Request LUMENCRAFT — เอกสารแนบ (ATTACHMENT FILE)
+                  </span>
+                </div>
+                <p className="text-xs text-slate-600 mt-1">
+                  125 อาคารอินฟินิท พัฒนาการ 13 แขวงสวนหลวง เขตสวนหลวง กรุงเทพมหานคร 10250
+                </p>
+              </div>
+              <div className="text-right text-xs">
+                <div className="font-mono font-bold">{docNumber || 'DOC-ATTACHMENT'}</div>
+                {soNumber && <div className="text-blue-700 font-mono font-bold">SO: {soNumber}</div>}
+                <div className="text-slate-500 text-[10px]">พิมพ์เมื่อ: {new Date().toLocaleDateString('th-TH')}</div>
+              </div>
             </div>
-            <p className="text-xs text-slate-600 mt-1">
-              ที่อยู่ 125 อาคารอินฟินิท พัฒนาการ 13 แขวงสวนหลวง เขตสวนหลวง กทม. 10250
-            </p>
-          </div>
-          <div className="text-right text-xs">
-            <div className="font-mono font-bold">{docNumber || 'DOC-ATTACHMENT'}</div>
-            {soNumber && <div className="text-slate-600 font-mono">SO: {soNumber}</div>}
-            <div className="text-slate-500 text-[11px]">พิมพ์เมื่อ: {new Date().toLocaleDateString('th-TH')} {new Date().toLocaleTimeString('th-TH')}</div>
-          </div>
-        </div>
 
-        {/* Printable File Metadata */}
-        <div className="my-4 p-3 bg-slate-50 rounded-lg border border-slate-200 text-xs flex justify-between items-center">
-          <div>
-            <div><strong>ชื่อไฟล์:</strong> {currentFile.name}</div>
-            <div><strong>ประเภท:</strong> {badge.label} | <strong>ขนาด:</strong> {formatFileSize(currentFile.size)}</div>
-            {projectName && <div><strong>โครงการ:</strong> {projectName}</div>}
-          </div>
-          <div className="text-right text-[11px] text-slate-500">
-            หน้า {currentIndex + 1} จาก {files.length} ไฟล์
-          </div>
-        </div>
+            {/* Printable File Metadata */}
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs flex justify-between items-center shadow-2xs">
+              <div>
+                <div className="font-bold text-slate-900 text-sm">{currentFile.name}</div>
+                <div className="text-slate-600 text-[11px] mt-0.5">
+                  ประเภท: <strong>{badge.label}</strong> | ขนาด: <strong>{formatFileSize(currentFile.size)}</strong>
+                  {projectName && <span> | โครงการ: <strong>{projectName}</strong></span>}
+                </div>
+              </div>
+              <div className="text-right text-[10.5px] font-mono font-bold text-slate-700 bg-white px-2 py-1 rounded border border-slate-200">
+                ไฟล์ที่ {currentIndex + 1} / {files.length}
+              </div>
+            </div>
 
-        {/* Printable Media Image / Drawing */}
-        {isImage && (
-          <div className="my-6 text-center">
-            <img
-              src={fileSource}
-              alt={currentFile.name}
-              className="max-h-[750px] max-w-full mx-auto object-contain rounded border border-slate-200"
-            />
-          </div>
-        )}
+            {/* Printable Media Image / Drawing */}
+            {isImage && (
+              <div className="my-2 flex items-center justify-center p-3 border border-slate-300 rounded-xl bg-slate-50/50 min-h-[550px] max-h-[680px]">
+                <img
+                  src={fileSource}
+                  alt={currentFile.name}
+                  className="max-h-[640px] max-w-full mx-auto object-contain rounded"
+                />
+              </div>
+            )}
 
-        {/* Non-image document summary printable view */}
-        {!isImage && (
-          <div className="my-10 p-8 border-2 border-dashed border-slate-300 rounded-xl text-center space-y-3">
-            <BadgeIcon className="w-12 h-12 mx-auto text-slate-600" />
-            <h3 className="text-base font-bold text-slate-900">{currentFile.name}</h3>
-            <p className="text-xs text-slate-600">
-              ประเภทไฟล์: {badge.label} • ขนาด {formatFileSize(currentFile.size)}
-            </p>
-            <p className="text-xs text-slate-500">
-              ไฟล์นี้ถูกแนบไว้ในระบบ E-Request LUMENCRAFT สามารถดาวน์โหลดและเปิดไฟล์ต้นฉบับได้จากระบบ
-            </p>
+            {/* Non-image document summary printable view */}
+            {!isImage && (
+              <div className="my-10 p-12 border-2 border-dashed border-slate-300 rounded-2xl text-center space-y-4 bg-slate-50/50">
+                <BadgeIcon className="w-16 h-16 mx-auto text-slate-500" />
+                <h3 className="text-lg font-bold text-slate-900">{currentFile.name}</h3>
+                <p className="text-xs text-slate-600">
+                  ประเภทไฟล์: {badge.label} • ขนาด {formatFileSize(currentFile.size)}
+                </p>
+                <p className="text-xs text-slate-500 max-w-md mx-auto italic">
+                  ไฟล์นี้ถูกแนบไว้ในระบบ e-Form SO No. {soNumber || '-'} สามารถดาวน์โหลดและเปิดไฟล์ต้นฉบับความละเอียดสูงได้จากระบบ
+                </p>
+              </div>
+            )}
           </div>
-        )}
 
-        {/* Printable Footer */}
-        <div className="mt-8 pt-3 border-t border-slate-200 text-center text-[10px] text-slate-400">
-          เอกสารแนบอิเล็กทรอนิกส์ • LUMENCRAFT CO., LTD. E-Engineer Request System
+          {/* Printable Footer */}
+          <div className="pt-3 border-t border-slate-300 text-center text-[9px] text-slate-400 mt-auto flex items-center justify-between">
+            <span>เอกสารแนบอิเล็กทรอนิกส์ • LUMENCRAFT CO., LTD. E-Engineer Request System</span>
+            <span className="font-mono font-bold text-slate-600">หน้า 1 / 1</span>
+          </div>
         </div>
       </div>
 

@@ -15,6 +15,14 @@ import {
 import { FaqItem, FaqCategory, EngineerInquiry, StaffMember } from '../types';
 import { INITIAL_FAQS } from '../utils/initialFaqs';
 import { LightingRoom3DVisualizer } from './LightingRoom3DVisualizer';
+import { 
+  openChatGPT, 
+  openChatGPTDirect, 
+  buildChatGptPrompt, 
+  openChatGptLightingReview, 
+  openChatGptVoltageDropReview, 
+  openChatGptRoiReview 
+} from '../utils/chatgpt';
 
 interface FaqKnowledgeHubProps {
   faqs?: FaqItem[];
@@ -96,6 +104,10 @@ export const FaqKnowledgeHub: React.FC<FaqKnowledgeHubProps> = ({
   const [aiSearchedQuery, setAiSearchedQuery] = useState('');
   const [aiError, setAiError] = useState<string | null>(null);
   const [aiCopied, setAiCopied] = useState(false);
+
+  // ChatGPT Integration States
+  const [chatGptToast, setChatGptToast] = useState<string | null>(null);
+  const [showChatGptMenu, setShowChatGptMenu] = useState(false);
 
   // Add / Edit FAQ Modal state
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -324,6 +336,27 @@ export const FaqKnowledgeHub: React.FC<FaqKnowledgeHubProps> = ({
     navigator.clipboard.writeText(textToCopy);
     setAiCopied(true);
     setTimeout(() => setAiCopied(false), 2500);
+  };
+
+  // 💬 ChatGPT Integration Handlers
+  const handleSearchWithChatGPT = (customQuery?: string, isDirect: boolean = false) => {
+    const q = (customQuery !== undefined ? customQuery : searchQuery).trim() || 'การเลือกหม้อแปลง 24V และการป้องกันไฟตก';
+    if (isDirect) {
+      openChatGPTDirect(q);
+      setChatGptToast(`เปิดค้นหาใน ChatGPT: "${q}"`);
+    } else {
+      openChatGPT(q, false);
+      setChatGptToast(`ส่งคำถามพร้อม Prompt วิศวกรไปยัง ChatGPT เรียบร้อยแล้ว!`);
+    }
+    setTimeout(() => setChatGptToast(null), 3000);
+  };
+
+  const handleCopyChatGptPromptForQuery = (customQuery?: string) => {
+    const q = (customQuery !== undefined ? customQuery : searchQuery).trim() || 'คำแนะนำด้านวิศวกรรมแสงสว่าง';
+    const prompt = buildChatGptPrompt(q);
+    navigator.clipboard.writeText(prompt);
+    setChatGptToast(`คัดลอก Prompt สำหรับ ChatGPT สำเร็จ! สามารถนำไปวางได้ทันที`);
+    setTimeout(() => setChatGptToast(null), 3000);
   };
 
   // ➕ Convert AI Answer to New FAQ with 1-Click
@@ -978,6 +1011,23 @@ ${ledRoiIncludeHvac ? '- รวมผลประหยัดโหลดแอ�
 
   return (
     <div className="max-w-7xl mx-auto space-y-6 pb-16">
+      {/* ChatGPT Toast Notification */}
+      {chatGptToast && (
+        <div className="fixed bottom-6 right-6 z-50 bg-slate-950 text-white px-4 py-3 rounded-2xl shadow-2xl border border-emerald-500/60 flex items-center gap-3 animate-in fade-in slide-in-from-bottom-4 duration-200">
+          <div className="p-1.5 rounded-lg bg-emerald-500/20 text-emerald-400">
+            <Bot className="w-5 h-5" />
+          </div>
+          <div className="text-xs font-semibold text-slate-100">
+            {chatGptToast}
+          </div>
+          <button
+            onClick={() => setChatGptToast(null)}
+            className="p-1 text-slate-400 hover:text-white"
+          >
+            ✕
+          </button>
+        </div>
+      )}
       
       {/* Top Banner with Search Box & AI Assistant Search */}
       <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-indigo-950 text-white rounded-2xl p-6 sm:p-8 shadow-md border border-slate-800 relative overflow-hidden">
@@ -1053,11 +1103,12 @@ ${ledRoiIncludeHvac ? '- รวมผลประหยัดโหลดแอ�
               </div>
 
               {/* Action Buttons */}
-              <div className="flex items-center gap-2 shrink-0">
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
                 <button
                   type="submit"
                   disabled={isAiSearching}
-                  className="flex-1 sm:flex-none px-5 py-3 rounded-xl text-xs sm:text-sm font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-md transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                  className="flex-1 sm:flex-none px-4 py-3 rounded-xl text-xs sm:text-sm font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-md transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                  title="ค้นหาจากฐานข้อมูลภายในและวิเคราะห์ด้วย AI"
                 >
                   {isAiSearching ? (
                     <>
@@ -1071,6 +1122,105 @@ ${ledRoiIncludeHvac ? '- รวมผลประหยัดโหลดแอ�
                     </>
                   )}
                 </button>
+
+                {/* Direct Link to ChatGPT */}
+                <div className="relative flex-1 sm:flex-none">
+                  <div className="flex items-center">
+                    <button
+                      type="button"
+                      onClick={() => handleSearchWithChatGPT(searchQuery, false)}
+                      className="flex-1 sm:flex-none px-4 py-3 rounded-l-xl text-xs sm:text-sm font-bold bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-md transition flex items-center justify-center gap-2 cursor-pointer"
+                      title="ส่งคำถามนี้ไปยัง ChatGPT พร้อม Prompt วิศวกรไฟฟ้า"
+                    >
+                      <Bot className="w-4 h-4 text-emerald-200" />
+                      <span>ถาม ChatGPT</span>
+                      <ExternalLink className="w-3 h-3 text-emerald-200" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowChatGptMenu(prev => !prev)}
+                      className="px-2 py-3 rounded-r-xl bg-emerald-700 hover:bg-emerald-600 text-emerald-100 border-l border-emerald-500 text-xs transition cursor-pointer"
+                      title="ตัวเลือกการค้นหาด้วย ChatGPT"
+                    >
+                      <ChevronDown className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {/* ChatGPT Options Dropdown */}
+                  {showChatGptMenu && (
+                    <div className="absolute right-0 top-full mt-2 w-72 bg-slate-900 border border-emerald-500/50 rounded-xl shadow-2xl p-2 z-50 space-y-1 animate-in fade-in zoom-in-95 duration-150">
+                      <div className="px-3 py-1.5 border-b border-slate-800 text-[11px] font-bold text-emerald-400 flex items-center justify-between">
+                        <span className="flex items-center gap-1.5">
+                          <Bot className="w-3.5 h-3.5" />
+                          ตัวเลือกเชื่อมต่อ ChatGPT
+                        </span>
+                        <button
+                          onClick={() => setShowChatGptMenu(false)}
+                          className="text-slate-400 hover:text-white"
+                        >
+                          ✕
+                        </button>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowChatGptMenu(false);
+                          handleSearchWithChatGPT(searchQuery, false);
+                        }}
+                        className="w-full text-left p-2.5 rounded-lg hover:bg-emerald-950/60 text-slate-200 hover:text-white transition flex items-start gap-2.5 text-xs group"
+                      >
+                        <Sparkles className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                        <div>
+                          <div className="font-bold text-white group-hover:text-emerald-300">
+                            ถาม ChatGPT (โหมดวิศวกรไฟฟ้า) ↗
+                          </div>
+                          <div className="text-[10px] text-slate-400">
+                            ใส่บริบทช่าง คำนวณวัตต์/สาย และมาตรฐาน วสท./IEC
+                          </div>
+                        </div>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowChatGptMenu(false);
+                          handleSearchWithChatGPT(searchQuery, true);
+                        }}
+                        className="w-full text-left p-2.5 rounded-lg hover:bg-slate-800 text-slate-200 hover:text-white transition flex items-start gap-2.5 text-xs group"
+                      >
+                        <Search className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
+                        <div>
+                          <div className="font-bold text-white group-hover:text-blue-300">
+                            ค้นหาใน ChatGPT ตรงๆ (Direct) ↗
+                          </div>
+                          <div className="text-[10px] text-slate-400">
+                            ค้นหาด้วยคำที่คุณพิมพ์โดยไม่เพิ่มบริบท
+                          </div>
+                        </div>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowChatGptMenu(false);
+                          handleCopyChatGptPromptForQuery(searchQuery);
+                        }}
+                        className="w-full text-left p-2.5 rounded-lg hover:bg-slate-800 text-slate-200 hover:text-white transition flex items-start gap-2.5 text-xs group"
+                      >
+                        <Copy className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                        <div>
+                          <div className="font-bold text-white group-hover:text-amber-300">
+                            คัดลอก Prompt สำหรับ ChatGPT
+                          </div>
+                          <div className="text-[10px] text-slate-400">
+                            ก็อปปี้ข้อความเตรียมไว้เพื่อนำไปวางใน ChatGPT เอง
+                          </div>
+                        </div>
+                      </button>
+                    </div>
+                  )}
+                </div>
 
                 <button
                   type="button"
@@ -1264,34 +1414,54 @@ ${ledRoiIncludeHvac ? '- รวมผลประหยัดโหลดแอ�
               </span>
             </div>
 
-            {/* Direct Google Action Buttons */}
-            <div className="flex flex-wrap gap-2 pt-1">
+            {/* Direct Google & ChatGPT Action Buttons */}
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => handleSearchWithChatGPT(aiSearchedQuery, false)}
+                className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold flex items-center gap-2 transition shadow-md cursor-pointer"
+                title="ส่งคำถามและหัวข้อนี้ไปคุยต่อใน ChatGPT"
+              >
+                <Bot className="w-4 h-4 text-emerald-200" />
+                <span>💬 ถาม & สนทนาต่อใน ChatGPT ↗</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleCopyChatGptPromptForQuery(aiSearchedQuery)}
+                className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium flex items-center gap-1.5 border border-slate-700 transition cursor-pointer"
+                title="คัดลอก Prompt สำหรับ ChatGPT"
+              >
+                <Copy className="w-3.5 h-3.5 text-amber-400" />
+                <span>คัดลอก Prompt ChatGPT</span>
+              </button>
+
               <a
                 href={aiResult.googleLinks?.mainSearchUrl || `https://www.google.com/search?q=${encodeURIComponent(aiSearchedQuery + ' มาตรฐานวิศวกรรมไฟฟ้า')}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-[11px] font-bold flex items-center gap-1.5 transition shadow-xs"
+                className="px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold flex items-center gap-1.5 transition shadow-xs"
               >
                 <Search className="w-3.5 h-3.5 text-amber-300" />
-                <span>เปิดดูผลการค้นหาเต็มบน Google ↗</span>
+                <span>ค้นหาบน Google ↗</span>
               </a>
 
               <a
                 href={aiResult.googleLinks?.diagramSearchUrl || `https://www.google.com/search?tbm=isch&q=${encodeURIComponent(aiSearchedQuery + ' wiring diagram')}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-semibold flex items-center gap-1.5 border border-slate-700 transition"
+                className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 border border-slate-700 transition"
               >
-                <span>🖼️ ค้นหาไดอะแกรมวงจร (Images) ↗</span>
+                <span>🖼️ ไดอะแกรมวงจร (Images) ↗</span>
               </a>
 
               <a
                 href={aiResult.googleLinks?.datasheetSearchUrl || `https://www.google.com/search?q=${encodeURIComponent(aiSearchedQuery + ' datasheet pdf')}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-semibold flex items-center gap-1.5 border border-slate-700 transition"
+                className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 border border-slate-700 transition"
               >
-                <span>📑 ค้นหาคู่มือ Datasheet PDF ↗</span>
+                <span>📑 Datasheet PDF ↗</span>
               </a>
             </div>
 
@@ -1612,7 +1782,27 @@ ${ledRoiIncludeHvac ? '- รวมผลประหยัดโหลดแอ�
                             </span>
                           </div>
                           
-                          <div className="flex items-center gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const prompt = buildChatGptPrompt(
+                                  `ขอปรึกษาคำถาม FAQ วิศวกรรม: "${faq.question}"`,
+                                  {
+                                    role: 'engineer',
+                                    contextData: `คำตอบเบื้องต้น:\n${faq.summary}\n${faq.steps ? `ขั้นตอน:\n${faq.steps.join('\n')}` : ''}\n${faq.technicalTips ? `ข้อควรระวัง: ${faq.technicalTips}` : ''}`
+                                  }
+                                );
+                                openChatGPT(prompt, true);
+                              }}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 transition cursor-pointer"
+                              title="เปิดถามและเจาะลึกคำถามนี้ต่อใน ChatGPT"
+                            >
+                              <Bot className="w-3.5 h-3.5 text-emerald-600" />
+                              <span>ถาม ChatGPT ↗</span>
+                            </button>
+
                             <button
                               onClick={(e) => handleCopyFaq(faq, e)}
                               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 transition cursor-pointer"
@@ -2970,6 +3160,48 @@ ${ledRoiIncludeHvac ? '- รวมผลประหยัดโหลดแอ�
                     isDownlightOrSpot={selectedLuminaireType === 'downlight_recessed' || selectedLuminaireType === 'spotlight_track'}
                   />
 
+                  {/* ChatGPT Lighting Review & Export Action */}
+                  <div className="p-3.5 rounded-xl bg-gradient-to-r from-emerald-950/60 to-slate-900 border border-emerald-500/40 flex flex-wrap items-center justify-between gap-3 text-xs">
+                    <div className="flex items-center gap-2.5">
+                      <div className="p-2 rounded-lg bg-emerald-500/20 text-emerald-400">
+                        <Bot className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <div className="font-bold text-white flex items-center gap-1.5">
+                          <span>ส่งข้อมูลให้ ChatGPT ตรวจสอบการจัดวางและเขียนรายงาน</span>
+                          <span className="px-1.5 py-0.2 rounded text-[10px] bg-emerald-500 text-slate-950 font-black">AI Review</span>
+                        </div>
+                        <div className="text-[11px] text-slate-300">
+                          ส่งขนาดห้อง {roomWidth}x{roomLength}m, {gridFixtureCount} โคม ({actualCalculatedLux.toFixed(0)} Lux) ให้ ChatGPT วิเคราะห์ความสม่ำเสมอ
+                        </div>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => openChatGptLightingReview({
+                        roomWidth,
+                        roomLength,
+                        roomHeight,
+                        workplaneHeight,
+                        targetLux,
+                        luminaireName: selectedLuminaireType === 'custom_ies' && parsedIesData
+                          ? parsedIesData.luminaireName
+                          : (LUMINAIRE_TYPES[selectedLuminaireType]?.name || 'โคมไฟส่องสว่าง'),
+                        fixtureWatts,
+                        fixtureLumens,
+                        totalFixtures: gridFixtureCount,
+                        calcLux: actualCalculatedLux,
+                        spacingWidth,
+                        spacingLength,
+                      })}
+                      className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold transition flex items-center gap-1.5 shadow-md cursor-pointer shrink-0"
+                    >
+                      <Bot className="w-3.5 h-3.5" />
+                      <span>เปิดวิเคราะห์ใน ChatGPT ↗</span>
+                    </button>
+                  </div>
+
                 </div>
 
               </div>
@@ -3610,6 +3842,26 @@ ${ledRoiIncludeHvac ? '- รวมผลประหยัดโหลดแอ�
                         )}
                       </div>
                     </div>
+
+                    {/* ChatGPT Review Button for Voltage Drop */}
+                    <div className="pt-2">
+                      <button
+                        type="button"
+                        onClick={() => openChatGptVoltageDropReview({
+                          voltage: 24,
+                          loadWatts: calcLoadWatts,
+                          loadAmp: calcLoadWatts / 24,
+                          cableLength: calcCableLength,
+                          cableSize: calcCableSize,
+                          vDropVolts: voltageDropVolts,
+                          vDropPercent: voltageDropPercent,
+                        })}
+                        className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold transition flex items-center justify-center gap-2 shadow-xs cursor-pointer"
+                      >
+                        <Bot className="w-4 h-4 text-emerald-200" />
+                        <span>💬 ส่งให้ ChatGPT วิเคราะห์วิธีแก้ปัญหาไฟตก & มาตรฐานสายไฟ ↗</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
@@ -4217,6 +4469,31 @@ ${ledRoiIncludeHvac ? '- รวมผลประหยัดโหลดแอ�
                         </div>
 
                       </div>
+
+                      {/* ChatGPT Executive Proposal Generator Button */}
+                      <button
+                        type="button"
+                        onClick={() => openChatGptRoiReview({
+                          scenarioName: ledRoiScenarioPreset === 'custom' ? 'โครงการปรับปรุงแสงสว่าง LED' : ledRoiScenarioPreset,
+                          qty: ledRoiQty,
+                          oldLampName: ledRoiOldLampName,
+                          oldWatts: ledRoiOldWatts,
+                          newLampName: ledRoiNewLampName,
+                          newWatts: ledRoiNewWatts,
+                          hoursPerDay: ledRoiHoursPerDay,
+                          daysPerYear: ledRoiDaysPerYear,
+                          electricityRate: ledRoiElectricityRate,
+                          totalInvestmentThb: totalInvestmentCostThb,
+                          annualSavingsThb: totalAnnualSavingsThb,
+                          paybackMonths: paybackPeriodMonths,
+                          roiPercent: annualRoiPercent,
+                          annualCo2Kg: annualCo2SavedKg,
+                        })}
+                        className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs shadow-md transition flex items-center justify-center gap-2 cursor-pointer"
+                      >
+                        <Bot className="w-4 h-4 text-emerald-200" />
+                        <span>💬 ส่งให้ ChatGPT ร่างข้อเสนอแนะความคุ้มทุนเสนอผู้บริหาร (Executive Proposal) ↗</span>
+                      </button>
 
                     </div>
 
