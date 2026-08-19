@@ -9,7 +9,8 @@ import {
   UserCheck, Clock, ShieldCheck, Bot, Globe,
   Loader2, RefreshCw, BookmarkPlus, ExternalLink,
   Sun, Maximize2, LayoutGrid, Gauge, Layers, Info,
-  Upload, FileCode, FolderUp, SlidersHorizontal, Settings2, ArrowDownUp, RefreshCcw
+  Upload, FileCode, FolderUp, SlidersHorizontal, Settings2, ArrowDownUp, RefreshCcw,
+  TrendingUp, PiggyBank, Percent, DollarSign, Leaf, BarChart3, Building, Warehouse, Hotel, Store, FileSpreadsheet
 } from 'lucide-react';
 import { FaqItem, FaqCategory, EngineerInquiry, StaffMember } from '../types';
 import { INITIAL_FAQS } from '../utils/initialFaqs';
@@ -123,7 +124,7 @@ export const FaqKnowledgeHub: React.FC<FaqKnowledgeHubProps> = ({
   const [promotingInquiry, setPromotingInquiry] = useState<EngineerInquiry | null>(null);
 
   // Interactive Calculator States
-  const [calcActiveSubTab, setCalcActiveSubTab] = useState<'all' | 'lumen_lux' | 'dc_current' | 'ac_current' | 'switching' | 'voltage_drop'>('all');
+  const [calcActiveSubTab, setCalcActiveSubTab] = useState<'all' | 'lumen_lux' | 'dc_current' | 'ac_current' | 'switching' | 'voltage_drop' | 'payback_roi'>('all');
 
   // 1. Lumen, Lux & Fixture Spacing Calculator State
   const [roomWidth, setRoomWidth] = useState<number>(6); // meters
@@ -136,6 +137,7 @@ export const FaqKnowledgeHub: React.FC<FaqKnowledgeHubProps> = ({
   // Luminaire Type & IES File Integration State
   const [selectedLuminaireType, setSelectedLuminaireType] = useState<string>('downlight_recessed');
   const [downlightBeamAngle, setDownlightBeamAngle] = useState<number>(36); // 10, 15, 20, 25, 36, 40, 50, 55, 60
+  const [efficacyMode, setEfficacyMode] = useState<'auto' | 'custom'>('auto'); // 'auto' (โหมดอัตโนมัติตามชนิดโคม) | 'custom' (กำหนดตัวเลขเอง)
   const [efficacyLmPerWatt, setEfficacyLmPerWatt] = useState<number>(100); // lm/W
   const [fixtureWatts, setFixtureWatts] = useState<number>(15); // Watts per fixture
   const [customFixtureLumen, setCustomFixtureLumen] = useState<number>(0); // 0 = auto calculate from watts * efficacy
@@ -193,6 +195,22 @@ export const FaqKnowledgeHub: React.FC<FaqKnowledgeHubProps> = ({
   const [calcLoadWatts, setCalcLoadWatts] = useState<number>(100);
   const [calcCableLength, setCalcCableLength] = useState<number>(15);
   const [calcCableSize, setCalcCableSize] = useState<number>(2.5);
+
+  // 6. LED Energy Saving & Payback / ROI Calculator State
+  const [ledRoiScenarioPreset, setLedRoiScenarioPreset] = useState<string>('office_t8');
+  const [ledRoiQty, setLedRoiQty] = useState<number>(50);
+  const [ledRoiOldLampName, setLedRoiOldLampName] = useState<string>('หลอดฟลูออเรสเซนต์ T8 36W (รวมบัลลาสต์ 46W)');
+  const [ledRoiOldWatts, setLedRoiOldWatts] = useState<number>(46);
+  const [ledRoiOldMaintenancePerYear, setLedRoiOldMaintenancePerYear] = useState<number>(80); // บาท/โคม/ปี
+  const [ledRoiNewLampName, setLedRoiNewLampName] = useState<string>('หลอด LED Tube T8 18W');
+  const [ledRoiNewWatts, setLedRoiNewWatts] = useState<number>(18);
+  const [ledRoiCostPerFixture, setLedRoiCostPerFixture] = useState<number>(220); // บาท/โคม
+  const [ledRoiInstallCostPerFixture, setLedRoiInstallCostPerFixture] = useState<number>(80); // บาท/โคม
+  const [ledRoiHoursPerDay, setLedRoiHoursPerDay] = useState<number>(10); // ชม./วัน
+  const [ledRoiDaysPerYear, setLedRoiDaysPerYear] = useState<number>(260); // วัน/ปี
+  const [ledRoiElectricityRate, setLedRoiElectricityRate] = useState<number>(4.70); // บาท/kWh
+  const [ledRoiIncludeHvac, setLedRoiIncludeHvac] = useState<boolean>(true);
+  const [ledRoiCopied, setLedRoiCopied] = useState<boolean>(false);
 
   const categories = [
     { id: 'all', label: 'คำถามทั้งหมด (All FAQ)', icon: BookOpen, count: displayFaqs.length },
@@ -801,6 +819,149 @@ export const FaqKnowledgeHub: React.FC<FaqKnowledgeHubProps> = ({
   const voltageAtEnd = 24 - voltageDropVolts;
   const voltageDropPercent = (voltageDropVolts / 24) * 100;
   const isVoltageDropSafe = voltageDropPercent <= 8;
+
+  // 6. LED Energy Saving & Payback / ROI Calculations
+  const totalOldPowerKw = (ledRoiOldWatts * ledRoiQty) / 1000;
+  const totalNewPowerKw = (ledRoiNewWatts * ledRoiQty) / 1000;
+  const directPowerSavedKw = Math.max(0, totalOldPowerKw - totalNewPowerKw);
+  const powerReductionPercent = totalOldPowerKw > 0 ? ((totalOldPowerKw - totalNewPowerKw) / totalOldPowerKw) * 100 : 0;
+  
+  // HVAC cooling energy saving: ~0.28 kW thermal AC power saved per 1 kW lighting reduced
+  const hvacPowerSavedKw = ledRoiIncludeHvac ? directPowerSavedKw * 0.28 : 0;
+  const totalPowerSavedKw = directPowerSavedKw + hvacPowerSavedKw;
+  
+  const annualOperatingHours = Math.max(1, ledRoiHoursPerDay * ledRoiDaysPerYear);
+  const annualEnergySavedKwh = totalPowerSavedKw * annualOperatingHours;
+  const annualElectricityCostSavedThb = annualEnergySavedKwh * ledRoiElectricityRate;
+  const annualMaintenanceCostSavedThb = ledRoiOldMaintenancePerYear * ledRoiQty;
+  const totalAnnualSavingsThb = annualElectricityCostSavedThb + annualMaintenanceCostSavedThb;
+  const monthlySavingsThb = totalAnnualSavingsThb / 12;
+  
+  const totalFixtureCostThb = ledRoiCostPerFixture * ledRoiQty;
+  const totalInstallCostThb = ledRoiInstallCostPerFixture * ledRoiQty;
+  const totalInvestmentCostThb = totalFixtureCostThb + totalInstallCostThb;
+  
+  const paybackPeriodYears = totalAnnualSavingsThb > 0 ? (totalInvestmentCostThb / totalAnnualSavingsThb) : 0;
+  const paybackPeriodMonths = paybackPeriodYears * 12;
+  const annualRoiPercent = totalInvestmentCostThb > 0 ? (totalAnnualSavingsThb / totalInvestmentCostThb) * 100 : 0;
+  
+  const threeYearNetSavingsThb = (totalAnnualSavingsThb * 3) - totalInvestmentCostThb;
+  const fiveYearNetSavingsThb = (totalAnnualSavingsThb * 5) - totalInvestmentCostThb;
+  const tenYearNetSavingsThb = (totalAnnualSavingsThb * 10) - totalInvestmentCostThb;
+  
+  // CO2 Emission Factor in Thailand: 0.4999 kg CO2e / kWh
+  const annualCo2SavedKg = annualEnergySavedKwh * 0.4999;
+  const annualCo2SavedTons = annualCo2SavedKg / 1000;
+  const equivalentTreesPlanted = Math.round(annualCo2SavedKg / 20);
+
+  const handleSelectLedRoiPreset = (presetKey: string) => {
+    setLedRoiScenarioPreset(presetKey);
+    if (presetKey === 'office_t8') {
+      setLedRoiQty(50);
+      setLedRoiOldLampName('หลอดฟลูออเรสเซนต์ T8 36W (รวมบัลลาสต์ 46W)');
+      setLedRoiOldWatts(46);
+      setLedRoiOldMaintenancePerYear(80);
+      setLedRoiNewLampName('หลอด LED Tube T8 18W (ต่อตรง 220V)');
+      setLedRoiNewWatts(18);
+      setLedRoiCostPerFixture(220);
+      setLedRoiInstallCostPerFixture(80);
+      setLedRoiHoursPerDay(10);
+      setLedRoiDaysPerYear(260);
+      setLedRoiElectricityRate(4.70);
+      setLedRoiIncludeHvac(true);
+    } else if (presetKey === 'factory_highbay') {
+      setLedRoiQty(100);
+      setLedRoiOldLampName('โคมไฮเบย์ Metal Halide 250W (รวมบัลลาสต์ 290W)');
+      setLedRoiOldWatts(290);
+      setLedRoiOldMaintenancePerYear(350);
+      setLedRoiNewLampName('โคม LED Highbay UFO 100W (140 lm/W)');
+      setLedRoiNewWatts(100);
+      setLedRoiCostPerFixture(1800);
+      setLedRoiInstallCostPerFixture(350);
+      setLedRoiHoursPerDay(24);
+      setLedRoiDaysPerYear(365);
+      setLedRoiElectricityRate(4.50);
+      setLedRoiIncludeHvac(false);
+    } else if (presetKey === 'warehouse_mh400') {
+      setLedRoiQty(60);
+      setLedRoiOldLampName('โคมไฮเบย์ Metal Halide 400W (รวมบัลลาสต์ 450W)');
+      setLedRoiOldWatts(450);
+      setLedRoiOldMaintenancePerYear(500);
+      setLedRoiNewLampName('โคม LED Highbay UFO 150W (150 lm/W)');
+      setLedRoiNewWatts(150);
+      setLedRoiCostPerFixture(2400);
+      setLedRoiInstallCostPerFixture(450);
+      setLedRoiHoursPerDay(18);
+      setLedRoiDaysPerYear(365);
+      setLedRoiElectricityRate(4.50);
+      setLedRoiIncludeHvac(false);
+    } else if (presetKey === 'hotel_mr16') {
+      setLedRoiQty(120);
+      setLedRoiOldLampName('หลอดฮาโลเจน MR16 50W (รวมหม้อแปลง 55W)');
+      setLedRoiOldWatts(55);
+      setLedRoiOldMaintenancePerYear(120);
+      setLedRoiNewLampName('หลอด LED MR16/GU10 Spotlight 7W');
+      setLedRoiNewWatts(7);
+      setLedRoiCostPerFixture(180);
+      setLedRoiInstallCostPerFixture(60);
+      setLedRoiHoursPerDay(24);
+      setLedRoiDaysPerYear(365);
+      setLedRoiElectricityRate(4.80);
+      setLedRoiIncludeHvac(true);
+    } else if (presetKey === 'retail_cfl') {
+      setLedRoiQty(80);
+      setLedRoiOldLampName('โคมดาวน์ไลท์หลอดประหยัด CFL 2x18W (รวมบัลลาสต์ 44W)');
+      setLedRoiOldWatts(44);
+      setLedRoiOldMaintenancePerYear(150);
+      setLedRoiNewLampName('โคม LED Downlight Panel 15W');
+      setLedRoiNewWatts(15);
+      setLedRoiCostPerFixture(320);
+      setLedRoiInstallCostPerFixture(90);
+      setLedRoiHoursPerDay(14);
+      setLedRoiDaysPerYear(365);
+      setLedRoiElectricityRate(4.70);
+      setLedRoiIncludeHvac(true);
+    }
+  };
+
+  const handleCopyLedRoiReport = () => {
+    const reportText = `=====================================================
+📊 รายงานวิเคราะห์ความคุ้มทุนและผลประหยัดพลังงานไฟ LED (LED Payback & ROI Proposal)
+จัดทำโดย: ฝ่ายวิศวกรรม LUMENCRAFT
+=====================================================
+📌 ข้อมูลระบบเดิม vs ระบบใหม่ (จำนวน ${ledRoiQty} โคม/จุด):
+- หลอดเดิม: ${ledRoiOldLampName} (${ledRoiOldWatts}W/โคม) | โหลดรวม: ${totalOldPowerKw.toFixed(2)} kW
+- หลอด LED ใหม่: ${ledRoiNewLampName} (${ledRoiNewWatts}W/โคม) | โหลดรวม: ${totalNewPowerKw.toFixed(2)} kW
+- ลดกำลังไฟฟ้าแสงสว่างได้: ${directPowerSavedKw.toFixed(2)} kW (${powerReductionPercent.toFixed(1)}%)
+- ชั่วโมงการใช้งาน: ${ledRoiHoursPerDay} ชม./วัน (${ledRoiDaysPerYear} วัน/ปี = ${annualOperatingHours.toLocaleString()} ชม./ปี)
+- อัตราค่าไฟฟ้าเฉลี่ย: ${ledRoiElectricityRate.toFixed(2)} บาท/หน่วย (kWh)
+${ledRoiIncludeHvac ? '- รวมผลประหยัดโหลดแอร์ (HVAC Cooling): +' + (hvacPowerSavedKw).toFixed(2) + ' kW' : ''}
+
+💰 งบประมาณการลงทุน (Total Initial Investment):
+- ค่าหลอด/โคม LED: ${totalFixtureCostThb.toLocaleString('th-TH', { maximumFractionDigits: 0 })} บาท (${ledRoiCostPerFixture} บ./โคม)
+- ค่าแรงติดตั้ง/รื้อถอน: ${totalInstallCostThb.toLocaleString('th-TH', { maximumFractionDigits: 0 })} บาท (${ledRoiInstallCostPerFixture} บ./จุด)
+👉 รวมเงินลงทุนทั้งสิ้น: ${totalInvestmentCostThb.toLocaleString('th-TH', { maximumFractionDigits: 0 })} บาท
+
+📈 ผลประหยัดและจุดคุ้มทุน (Payback Period & Financial Returns):
+- ประหยัดพลังงานไฟฟ้าต่อปี: ${Math.round(annualEnergySavedKwh).toLocaleString()} kWh/ปี
+- ประหยัดค่าไฟฟ้าต่อเดือน: ${Math.round(monthlySavingsThb).toLocaleString()} บาท/เดือน
+- ประหยัดค่าไฟฟ้าต่อปี: ${Math.round(annualElectricityCostSavedThb).toLocaleString()} บาท/ปี
+- ประหยัดค่าบำรุงรักษาหลอดเดิม: ${Math.round(annualMaintenanceCostSavedThb).toLocaleString()} บาท/ปี
+⭐ รวมผลประหยัดทั้งสิ้นต่อปี: ${Math.round(totalAnnualSavingsThb).toLocaleString()} บาท/ปี
+⭐ ระยะเวลาคืนทุน (Payback Period): ${paybackPeriodMonths.toFixed(1)} เดือน (${paybackPeriodYears.toFixed(2)} ปี)
+⭐ อัตราผลตอบแทนต่อปี (Annual ROI): ${annualRoiPercent.toFixed(1)}% ต่อปี
+
+🌱 ผลประหยัดสะสมสุทธิ (Net Savings after Investment):
+- ผลประหยัดสุทธิสะสม 3 ปี: ${Math.round(threeYearNetSavingsThb).toLocaleString()} บาท
+- ผลประหยัดสุทธิสะสม 5 ปี: ${Math.round(fiveYearNetSavingsThb).toLocaleString()} บาท
+- ผลประหยัดสุทธิสะสม 10 ปี: ${Math.round(tenYearNetSavingsThb).toLocaleString()} บาท
+- ลดการปล่อยก๊าซเรือนกระจก (CO2): ${annualCo2SavedKg.toFixed(0)} kg CO2e/ปี (เทียบเท่าปลูกต้นไม้ ${equivalentTreesPlanted} ต้น/ปี)
+=====================================================`;
+
+    navigator.clipboard.writeText(reportText);
+    setLedRoiCopied(true);
+    setTimeout(() => setLedRoiCopied(false), 2500);
+  };
 
   // Inquiries for FAQ candidates
   const faqCandidates = inquiries.filter(inq => inq.forFaq || inq.category);
@@ -1702,6 +1863,18 @@ export const FaqKnowledgeHub: React.FC<FaqKnowledgeHubProps> = ({
                 <Cable className="w-3.5 h-3.5" />
                 <span>5. แรงดันตกสายไฟ 24V</span>
               </button>
+              <button
+                type="button"
+                onClick={() => setCalcActiveSubTab('payback_roi')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition whitespace-nowrap cursor-pointer flex items-center gap-1 ${
+                  calcActiveSubTab === 'payback_roi'
+                    ? 'bg-amber-500 text-slate-950 shadow-xs'
+                    : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white'
+                }`}
+              >
+                <TrendingUp className="w-3.5 h-3.5" />
+                <span>6. จุดคุ้มทุน & คืนทุน LED (Payback & ROI)</span>
+              </button>
             </div>
           </div>
 
@@ -2138,97 +2311,343 @@ export const FaqKnowledgeHub: React.FC<FaqKnowledgeHubProps> = ({
                   </div>
 
                   {/* Fixture Efficacy (Lumen/Watt) & Wattage */}
-                  <div className="p-4 rounded-xl bg-amber-50/50 border border-amber-200/80 space-y-3">
-                    <div className="flex items-center justify-between font-bold text-slate-900 border-b border-amber-200/60 pb-2">
-                      <span className="flex items-center gap-1.5 text-amber-900">
-                        <Lightbulb className="w-4 h-4 text-amber-600" />
-                        ประสิทธิภาพโคมไฟและกำลังวัตต์ (Lumen / Watt / Fixture):
-                      </span>
-                      <span className="text-[11px] text-amber-800 font-mono font-bold">
-                        {fixtureLumens.toLocaleString()} Lumen / โคม
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      
-                      {/* Efficacy (Lumen per Watt) */}
-                      <div>
-                        <label className="block font-bold text-slate-700 mb-1">
-                          ค่าประสิทธิภาพส่องสว่าง (Lumen / Watt):
-                        </label>
-                        <div className="grid grid-cols-4 gap-1.5">
-                          {[90, 100, 110, 140].map(lmw => (
-                            <button
-                              key={lmw}
-                              type="button"
-                              onClick={() => {
-                                setEfficacyLmPerWatt(lmw);
-                                setCustomFixtureLumen(0);
-                              }}
-                              className={`py-1.5 rounded-lg text-xs font-bold border transition cursor-pointer ${
-                                efficacyLmPerWatt === lmw && customFixtureLumen === 0
-                                  ? 'bg-amber-500 text-slate-950 border-amber-600 shadow-xs'
-                                  : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
-                              }`}
-                            >
-                              {lmw} lm/W
-                            </button>
-                          ))}
-                        </div>
-                        <div className="mt-1.5 flex items-center gap-2">
-                          <input
-                            type="number"
-                            min={50}
-                            max={220}
-                            value={efficacyLmPerWatt}
-                            onChange={e => {
-                              setEfficacyLmPerWatt(Number(e.target.value));
-                              setCustomFixtureLumen(0);
-                            }}
-                            className="w-20 p-1.5 rounded-lg border border-slate-300 font-mono font-bold text-center text-xs"
-                          />
-                          <span className="text-[10px] text-slate-500">lm/W (กำหนดค่าเอง)</span>
+                  <div className="p-4 rounded-xl bg-gradient-to-br from-amber-50/70 via-white to-amber-50/30 border border-amber-300/80 shadow-xs space-y-3.5">
+                    
+                    {/* Header with Mode Toggle */}
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-200/80 pb-2.5">
+                      <div className="flex items-center gap-2">
+                        <span className="p-1.5 rounded-lg bg-amber-500 text-slate-950 font-bold shadow-xs">
+                          <Lightbulb className="w-4 h-4" />
+                        </span>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-slate-900 text-xs">
+                              ค่าประสิทธิภาพส่องสว่าง (Luminous Efficacy : Lumen / Watt) & กำลังวัตต์
+                            </span>
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold ${
+                              efficacyMode === 'auto'
+                                ? 'bg-amber-500 text-slate-950 shadow-xs'
+                                : 'bg-blue-600 text-white shadow-xs'
+                            }`}>
+                              {efficacyMode === 'auto' ? '⚡ AUTO (ตามชนิดโคม)' : '✏️ กำหนดตัวเลขเอง'}
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-slate-500">
+                            กำหนดประสิทธิภาพ Lumen ต่อ Watt เพื่อหาฟลักซ์ส่องสว่างรวมต่อโคม (Lumen/โคม = W × lm/W)
+                          </p>
                         </div>
                       </div>
 
-                      {/* Watt per Fixture */}
-                      <div>
-                        <label className="block font-bold text-slate-700 mb-1">
-                          กำลังวัตต์ต่อโคมไฟ (Watt / Fixture):
-                        </label>
-                        <div className="grid grid-cols-4 gap-1.5">
-                          {[15, 24, 36, 100].map(w => (
+                      {/* Mode Toggle Buttons: AUTO vs CUSTOM */}
+                      <div className="flex items-center gap-1 bg-slate-200/80 p-1 rounded-xl border border-slate-300">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEfficacyMode('auto');
+                            if (selectedLuminaireType === 'custom_ies' && parsedIesData) {
+                              setEfficacyLmPerWatt(parsedIesData.efficacy);
+                            } else if (LUMINAIRE_TYPES[selectedLuminaireType]) {
+                              setEfficacyLmPerWatt(LUMINAIRE_TYPES[selectedLuminaireType].defaultLmPerW);
+                            }
+                            setCustomFixtureLumen(0);
+                          }}
+                          className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition flex items-center gap-1 cursor-pointer ${
+                            efficacyMode === 'auto'
+                              ? 'bg-amber-500 text-slate-950 shadow-xs font-black'
+                              : 'text-slate-700 hover:text-slate-950'
+                          }`}
+                        >
+                          <Sparkles className="w-3 h-3" />
+                          <span>⚡ AUTO (อัตโนมัติ)</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEfficacyMode('custom');
+                            setCustomFixtureLumen(0);
+                          }}
+                          className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition flex items-center gap-1 cursor-pointer ${
+                            efficacyMode === 'custom'
+                              ? 'bg-blue-600 text-white shadow-xs font-black'
+                              : 'text-slate-700 hover:text-slate-950'
+                          }`}
+                        >
+                          <Edit3 className="w-3 h-3" />
+                          <span>✏️ กำหนดตัวเลขเอง</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Efficacy and Wattage Grid Controls */}
+                    <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+                      
+                      {/* Left: Efficacy (Lumen per Watt) Section (7 cols) */}
+                      <div className="md:col-span-7 bg-white p-3.5 rounded-xl border border-amber-200/90 space-y-2.5 shadow-2xs">
+                        
+                        <div className="flex items-center justify-between">
+                          <label className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+                            <span>💡 ค่าประสิทธิภาพ (Lumen / Watt):</span>
+                            <span className="font-mono text-amber-600 font-black text-sm bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                              {efficacyLmPerWatt} lm/W
+                            </span>
+                          </label>
+
+                          {/* Efficiency Rating Grade Pill */}
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                            efficacyLmPerWatt >= 140
+                              ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                              : efficacyLmPerWatt >= 110
+                              ? 'bg-cyan-100 text-cyan-800 border-cyan-300'
+                              : efficacyLmPerWatt >= 90
+                              ? 'bg-amber-100 text-amber-800 border-amber-300'
+                              : 'bg-orange-100 text-orange-800 border-orange-300'
+                          }`}>
+                            {efficacyLmPerWatt >= 140
+                              ? '🏆 ประสิทธิภาพสูงพิเศษ (Highbay / Ultra LED)'
+                              : efficacyLmPerWatt >= 110
+                              ? '🟢 ประสิทธิภาพสูง (Commercial LED)'
+                              : efficacyLmPerWatt >= 90
+                              ? '🟡 มาตรฐานทั่วไป (Standard LED)'
+                              : '🟠 แสงเน้น/CRIสูง (Accent / Wallwasher)'}
+                          </span>
+                        </div>
+
+                        {/* AUTO Mode Indicator & Description */}
+                        {efficacyMode === 'auto' ? (
+                          <div className="p-2.5 rounded-lg bg-amber-50/80 border border-amber-200 text-xs space-y-1.5">
+                            <div className="flex items-center justify-between text-[11px] text-amber-900 font-medium">
+                              <span>
+                                ⚡ อิงตามสเปกโคม: <strong>{LUMINAIRE_TYPES[selectedLuminaireType]?.name.split('(')[0] || 'โคมมาตรฐาน'}</strong>
+                              </span>
+                              <span className="font-mono font-bold text-amber-700">
+                                {LUMINAIRE_TYPES[selectedLuminaireType]?.defaultLmPerW || 100} lm/W
+                              </span>
+                            </div>
+                            <p className="text-[10px] text-slate-500 leading-relaxed">
+                              ระบบตั้งค่าประสิทธิภาพมาตรฐานตามชนิดโคมไฟที่เลือกอัตโนมัติ สามารถสลับเป็นโหมด <strong>"กำหนดตัวเลขเอง"</strong> หรือคลิกปุ่มด้านล่างเพื่อปรับแต่งตามสเปกหลอด LED จริง
+                            </p>
+                          </div>
+                        ) : null}
+
+                        {/* Custom Number Input with Steppers & Range Slider */}
+                        <div className="space-y-2 pt-0.5">
+                          <div className="flex items-center gap-2">
+                            {/* Stepper Down */}
                             <button
-                              key={w}
                               type="button"
                               onClick={() => {
-                                setFixtureWatts(w);
+                                setEfficacyMode('custom');
+                                setEfficacyLmPerWatt(Math.max(30, efficacyLmPerWatt - 5));
                                 setCustomFixtureLumen(0);
                               }}
-                              className={`py-1.5 rounded-lg text-xs font-bold border transition cursor-pointer ${
-                                fixtureWatts === w && customFixtureLumen === 0
-                                  ? 'bg-amber-500 text-slate-950 border-amber-600 shadow-xs'
-                                  : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
-                              }`}
+                              className="px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-mono font-bold text-xs border border-slate-300 cursor-pointer"
+                              title="ลดลง 5 lm/W"
                             >
-                              {w} W
+                              -5
                             </button>
-                          ))}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEfficacyMode('custom');
+                                setEfficacyLmPerWatt(Math.max(30, efficacyLmPerWatt - 1));
+                                setCustomFixtureLumen(0);
+                              }}
+                              className="px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-mono font-bold text-xs border border-slate-300 cursor-pointer"
+                              title="ลดลง 1 lm/W"
+                            >
+                              -1
+                            </button>
+
+                            {/* Direct Editable Number Input */}
+                            <div className="relative flex-1">
+                              <input
+                                type="number"
+                                min={30}
+                                max={250}
+                                step={1}
+                                value={efficacyLmPerWatt}
+                                onChange={e => {
+                                  setEfficacyMode('custom');
+                                  const val = Number(e.target.value);
+                                  setEfficacyLmPerWatt(val > 0 ? val : 100);
+                                  setCustomFixtureLumen(0);
+                                }}
+                                className="w-full py-1.5 px-3 rounded-lg border border-amber-300 font-mono font-bold text-slate-900 text-sm text-center bg-amber-50/30 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-amber-500"
+                                placeholder="เช่น 100, 125, 140"
+                              />
+                              <span className="absolute right-2.5 top-2 text-[10px] font-bold text-slate-400 pointer-events-none">
+                                lm/W
+                              </span>
+                            </div>
+
+                            {/* Stepper Up */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEfficacyMode('custom');
+                                setEfficacyLmPerWatt(Math.min(250, efficacyLmPerWatt + 1));
+                                setCustomFixtureLumen(0);
+                              }}
+                              className="px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-mono font-bold text-xs border border-slate-300 cursor-pointer"
+                              title="เพิ่มขึ้น 1 lm/W"
+                            >
+                              +1
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEfficacyMode('custom');
+                                setEfficacyLmPerWatt(Math.min(250, efficacyLmPerWatt + 5));
+                                setCustomFixtureLumen(0);
+                              }}
+                              className="px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-mono font-bold text-xs border border-slate-300 cursor-pointer"
+                              title="เพิ่มขึ้น 5 lm/W"
+                            >
+                              +5
+                            </button>
+
+                            {/* Reset to Auto Button */}
+                            {efficacyMode === 'custom' && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEfficacyMode('auto');
+                                  if (selectedLuminaireType === 'custom_ies' && parsedIesData) {
+                                    setEfficacyLmPerWatt(parsedIesData.efficacy);
+                                  } else if (LUMINAIRE_TYPES[selectedLuminaireType]) {
+                                    setEfficacyLmPerWatt(LUMINAIRE_TYPES[selectedLuminaireType].defaultLmPerW);
+                                  }
+                                  setCustomFixtureLumen(0);
+                                }}
+                                className="px-2 py-1.5 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold text-[10px] border border-amber-300 cursor-pointer whitespace-nowrap"
+                                title="คืนค่ามาตรฐาน AUTO ตามชนิดโคม"
+                              >
+                                🔄 รีเซ็ต AUTO
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Interactive Range Slider (50 to 220 lm/W) */}
+                          <div className="flex items-center gap-2 pt-1">
+                            <span className="text-[10px] font-mono text-slate-400 font-bold">50</span>
+                            <input
+                              type="range"
+                              min={50}
+                              max={220}
+                              step={5}
+                              value={efficacyLmPerWatt}
+                              onChange={e => {
+                                setEfficacyMode('custom');
+                                setEfficacyLmPerWatt(Number(e.target.value));
+                                setCustomFixtureLumen(0);
+                              }}
+                              className="flex-1 accent-amber-500 cursor-pointer h-2 bg-slate-200 rounded-lg"
+                            />
+                            <span className="text-[10px] font-mono text-amber-600 font-bold">220 lm/W</span>
+                          </div>
+
+                          {/* Quick Preset Buttons (80, 90, 100, 110, 120, 130, 140, 150, 160, 180) */}
+                          <div className="pt-1 space-y-1">
+                            <div className="text-[10px] text-slate-500 font-medium">ปุ่มลัดค่ามาตรฐาน (Quick Presets):</div>
+                            <div className="grid grid-cols-5 sm:grid-cols-10 gap-1">
+                              {[80, 90, 100, 110, 120, 130, 140, 150, 160, 180].map(lmw => {
+                                const isCur = efficacyLmPerWatt === lmw;
+                                return (
+                                  <button
+                                    key={`eff-preset-${lmw}`}
+                                    type="button"
+                                    onClick={() => {
+                                      setEfficacyMode('custom');
+                                      setEfficacyLmPerWatt(lmw);
+                                      setCustomFixtureLumen(0);
+                                    }}
+                                    className={`py-1 px-0.5 rounded text-center text-[10px] font-mono font-bold border transition cursor-pointer ${
+                                      isCur
+                                        ? 'bg-amber-500 text-slate-950 border-amber-600 shadow-xs scale-102'
+                                        : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100 hover:text-slate-900'
+                                    }`}
+                                  >
+                                    {lmw}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
                         </div>
-                        <div className="mt-1.5 flex items-center gap-2">
-                          <input
-                            type="number"
-                            min={3}
-                            max={500}
-                            value={fixtureWatts}
-                            onChange={e => {
-                              setFixtureWatts(Number(e.target.value));
-                              setCustomFixtureLumen(0);
-                            }}
-                            className="w-20 p-1.5 rounded-lg border border-slate-300 font-mono font-bold text-center text-xs"
-                          />
-                          <span className="text-[10px] text-slate-500">Watts (เช่น 18W, 50W, 150W)</span>
+
+                      </div>
+
+                      {/* Right: Wattage per Fixture & Total Calculated Lumen Preview (5 cols) */}
+                      <div className="md:col-span-5 bg-white p-3.5 rounded-xl border border-amber-200/90 space-y-3 shadow-2xs flex flex-col justify-between">
+                        
+                        {/* Wattage Setting */}
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <label className="font-bold text-slate-800 text-xs">
+                              ⚡ กำลังวัตต์ต่อโคม (Watts):
+                            </label>
+                            <span className="font-mono font-bold text-slate-900 bg-slate-100 px-2 py-0.5 rounded border border-slate-200 text-xs">
+                              {fixtureWatts} Watts
+                            </span>
+                          </div>
+
+                          {/* Quick Watt Buttons */}
+                          <div className="grid grid-cols-4 gap-1.5">
+                            {[15, 24, 36, 100].map(w => (
+                              <button
+                                key={w}
+                                type="button"
+                                onClick={() => {
+                                  setFixtureWatts(w);
+                                  setCustomFixtureLumen(0);
+                                }}
+                                className={`py-1.5 rounded-lg text-xs font-bold border transition cursor-pointer ${
+                                  fixtureWatts === w && customFixtureLumen === 0
+                                    ? 'bg-amber-500 text-slate-950 border-amber-600 shadow-xs'
+                                    : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
+                                }`}
+                              >
+                                {w} W
+                              </button>
+                            ))}
+                          </div>
+
+                          {/* Custom Watt Input */}
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="number"
+                              min={3}
+                              max={500}
+                              value={fixtureWatts}
+                              onChange={e => {
+                                setFixtureWatts(Number(e.target.value));
+                                setCustomFixtureLumen(0);
+                              }}
+                              className="w-24 p-1.5 rounded-lg border border-slate-300 font-mono font-bold text-center text-xs bg-slate-50 focus:bg-white"
+                            />
+                            <span className="text-[10px] text-slate-500">Watts (กำหนดวัตต์เอง เช่น 18W, 50W, 150W)</span>
+                          </div>
                         </div>
+
+                        {/* Calculated Luminous Flux Output Card */}
+                        <div className="p-3 rounded-xl bg-gradient-to-br from-slate-950 to-slate-900 text-white border border-slate-800 space-y-1.5">
+                          <div className="flex items-center justify-between text-[11px] text-amber-300 font-bold">
+                            <span>✨ ฟลักซ์ส่องสว่างต่อโคม (Luminous Flux):</span>
+                          </div>
+                          <div className="flex items-baseline justify-between">
+                            <span className="text-xl font-mono font-black text-amber-400">
+                              {fixtureLumens.toLocaleString()}
+                            </span>
+                            <span className="text-xs text-slate-300 font-mono">Lumen (lm) / โคม</span>
+                          </div>
+                          <div className="text-[10px] text-slate-400 font-mono border-t border-slate-800 pt-1 flex items-center justify-between">
+                            <span>สูตร: {fixtureWatts}W × {efficacyLmPerWatt} lm/W</span>
+                            <span className="text-emerald-400 font-bold">
+                              {gridFixtureCount} โคม = {(gridFixtureCount * fixtureLumens).toLocaleString()} lm รวม
+                            </span>
+                          </div>
+                        </div>
+
                       </div>
 
                     </div>
@@ -3192,6 +3611,617 @@ export const FaqKnowledgeHub: React.FC<FaqKnowledgeHubProps> = ({
                       </div>
                     </div>
                   </div>
+                </div>
+              )}
+
+              {/* ================= 6. LED ENERGY SAVING & PAYBACK / ROI CALCULATOR ================= */}
+              {(calcActiveSubTab === 'all' || calcActiveSubTab === 'payback_roi') && (
+                <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-6 lg:col-span-2">
+                  
+                  {/* Header */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+                    <div className="flex items-center space-x-3">
+                      <div className="p-3 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-md">
+                        <TrendingUp className="w-6 h-6 stroke-[2.5]" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-lg font-black text-slate-900">
+                            6. เครื่องคำนวณจุดคุ้มทุน (Payback Period) และความคุ้มค่าการเปลี่ยนหลอดไฟ LED (Energy Saving ROI)
+                          </h3>
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                            Financial ROI & ESG
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          เปรียบเทียบกำลังไฟฟ้าและค่าไฟฟ้าเดิม vs หลอด LED ใหม่, คำนวณระยะเวลาคืนทุน (เดือน/ปี), อัตราผลตอบแทน ROI %, ผลประหยัดสะสม 5-10 ปี และลดการปล่อยก๊าซคาร์บอน CO2
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleCopyLedRoiReport}
+                        className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm transition flex items-center gap-1.5 cursor-pointer"
+                      >
+                        {ledRoiCopied ? <Check className="w-4 h-4 text-emerald-200" /> : <Copy className="w-4 h-4" />}
+                        <span>{ledRoiCopied ? 'คัดลอกรายงานเรียบร้อย!' : 'คัดลอกสรุปข้อเสนอ ROI'}</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Preset Scenarios */}
+                  <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                        เลือกรูปแบบโครงการตัวอย่างด่วน (Quick Scenario Presets):
+                      </span>
+                      <span className="text-[11px] text-slate-500">คลิกเพื่อโหลดค่าสเปกมาตรฐาน</span>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 text-xs">
+                      <button
+                        type="button"
+                        onClick={() => handleSelectLedRoiPreset('office_t8')}
+                        className={`p-2.5 rounded-xl border text-left transition cursor-pointer flex flex-col justify-between gap-1 ${
+                          ledRoiScenarioPreset === 'office_t8'
+                            ? 'bg-emerald-500 text-slate-950 border-emerald-600 font-bold shadow-xs'
+                            : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        <div className="flex items-center gap-1 font-bold">
+                          <Building className="w-3.5 h-3.5 shrink-0" />
+                          <span>สำนักงาน Office</span>
+                        </div>
+                        <div className="text-[10px] opacity-80 leading-tight">
+                          T8 36W (46W) ➔ LED 18W
+                        </div>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleSelectLedRoiPreset('factory_highbay')}
+                        className={`p-2.5 rounded-xl border text-left transition cursor-pointer flex flex-col justify-between gap-1 ${
+                          ledRoiScenarioPreset === 'factory_highbay'
+                            ? 'bg-emerald-500 text-slate-950 border-emerald-600 font-bold shadow-xs'
+                            : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        <div className="flex items-center gap-1 font-bold">
+                          <Warehouse className="w-3.5 h-3.5 shrink-0" />
+                          <span>โรงงาน Highbay 250W</span>
+                        </div>
+                        <div className="text-[10px] opacity-80 leading-tight">
+                          MH 250W (290W) ➔ UFO 100W
+                        </div>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleSelectLedRoiPreset('warehouse_mh400')}
+                        className={`p-2.5 rounded-xl border text-left transition cursor-pointer flex flex-col justify-between gap-1 ${
+                          ledRoiScenarioPreset === 'warehouse_mh400'
+                            ? 'bg-emerald-500 text-slate-950 border-emerald-600 font-bold shadow-xs'
+                            : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        <div className="flex items-center gap-1 font-bold">
+                          <Warehouse className="w-3.5 h-3.5 shrink-0" />
+                          <span>คลังสินค้า Highbay 400W</span>
+                        </div>
+                        <div className="text-[10px] opacity-80 leading-tight">
+                          MH 400W (450W) ➔ UFO 150W
+                        </div>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleSelectLedRoiPreset('hotel_mr16')}
+                        className={`p-2.5 rounded-xl border text-left transition cursor-pointer flex flex-col justify-between gap-1 ${
+                          ledRoiScenarioPreset === 'hotel_mr16'
+                            ? 'bg-emerald-500 text-slate-950 border-emerald-600 font-bold shadow-xs'
+                            : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        <div className="flex items-center gap-1 font-bold">
+                          <Hotel className="w-3.5 h-3.5 shrink-0" />
+                          <span>โรงแรม Halogen 24 ชม.</span>
+                        </div>
+                        <div className="text-[10px] opacity-80 leading-tight">
+                          MR16 50W (55W) ➔ LED 7W
+                        </div>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleSelectLedRoiPreset('retail_cfl')}
+                        className={`p-2.5 rounded-xl border text-left transition cursor-pointer flex flex-col justify-between gap-1 ${
+                          ledRoiScenarioPreset === 'retail_cfl'
+                            ? 'bg-emerald-500 text-slate-950 border-emerald-600 font-bold shadow-xs'
+                            : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        <div className="flex items-center gap-1 font-bold">
+                          <Store className="w-3.5 h-3.5 shrink-0" />
+                          <span>ห้าง/ร้านค้า Downlight</span>
+                        </div>
+                        <div className="text-[10px] opacity-80 leading-tight">
+                          CFL 2x18W (44W) ➔ LED 15W
+                        </div>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Main Grid: Inputs vs Outputs */}
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                    
+                    {/* Left Form: Inputs (7 cols) */}
+                    <div className="lg:col-span-7 space-y-4 text-xs">
+                      
+                      {/* Section 1: Traditional vs New LED Comparison Inputs */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                        
+                        {/* Old Lighting System Card */}
+                        <div className="p-4 rounded-xl bg-slate-900 text-white border border-slate-800 space-y-3 shadow-sm">
+                          <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                            <span className="font-bold text-amber-400 flex items-center gap-1.5">
+                              <Lightbulb className="w-4 h-4" />
+                              ระบบโคมไฟเดิม (Existing)
+                            </span>
+                            <span className="text-[10px] bg-slate-800 px-2 py-0.5 rounded text-slate-300 font-mono">
+                              โหลดเดิม
+                            </span>
+                          </div>
+
+                          <div>
+                            <label className="block text-slate-300 mb-1">ชื่อ/ชนิดโคมไฟเดิม:</label>
+                            <input
+                              type="text"
+                              value={ledRoiOldLampName}
+                              onChange={e => {
+                                setLedRoiOldLampName(e.target.value);
+                                setLedRoiScenarioPreset('custom');
+                              }}
+                              className="w-full p-2 rounded-lg bg-slate-800 border border-slate-700 text-white font-semibold"
+                            />
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="block text-slate-300 mb-1">
+                                กำลังวัตต์รวมบัลลาสต์:
+                              </label>
+                              <div className="flex items-center gap-1">
+                                <input
+                                  type="number"
+                                  min={1}
+                                  max={2000}
+                                  value={ledRoiOldWatts}
+                                  onChange={e => {
+                                    setLedRoiOldWatts(Math.max(1, Number(e.target.value)));
+                                    setLedRoiScenarioPreset('custom');
+                                  }}
+                                  className="w-full p-2 rounded-lg bg-slate-800 border border-slate-700 text-white font-bold font-mono"
+                                />
+                                <span className="text-slate-400 font-mono">W</span>
+                              </div>
+                            </div>
+
+                            <div>
+                              <label className="block text-slate-300 mb-1">
+                                ค่าซ่อม/เปลี่ยนหลอดเดิม:
+                              </label>
+                              <div className="flex items-center gap-1">
+                                <input
+                                  type="number"
+                                  min={0}
+                                  max={5000}
+                                  value={ledRoiOldMaintenancePerYear}
+                                  onChange={e => {
+                                    setLedRoiOldMaintenancePerYear(Math.max(0, Number(e.target.value)));
+                                    setLedRoiScenarioPreset('custom');
+                                  }}
+                                  className="w-full p-2 rounded-lg bg-slate-800 border border-slate-700 text-white font-bold font-mono"
+                                />
+                                <span className="text-slate-400 font-mono">บ./ปี</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="p-2 rounded-lg bg-slate-800/80 border border-slate-700 text-[11px] text-slate-300 flex justify-between items-center">
+                            <span>โหลดไฟเดิมรวม ({ledRoiQty} โคม):</span>
+                            <span className="font-mono font-bold text-amber-300">{totalOldPowerKw.toFixed(2)} kW</span>
+                          </div>
+                        </div>
+
+                        {/* New LED System Card */}
+                        <div className="p-4 rounded-xl bg-emerald-950 text-white border border-emerald-900 space-y-3 shadow-sm">
+                          <div className="flex items-center justify-between border-b border-emerald-900 pb-2">
+                            <span className="font-bold text-emerald-400 flex items-center gap-1.5">
+                              <Zap className="w-4 h-4" />
+                              ระบบหลอด LED ใหม่ (New)
+                            </span>
+                            <span className="text-[10px] bg-emerald-900 px-2 py-0.5 rounded text-emerald-200 font-mono">
+                              ประหยัดไฟ {powerReductionPercent.toFixed(0)}%
+                            </span>
+                          </div>
+
+                          <div>
+                            <label className="block text-emerald-200 mb-1">ชื่อ/ชนิดหลอด LED ใหม่:</label>
+                            <input
+                              type="text"
+                              value={ledRoiNewLampName}
+                              onChange={e => {
+                                setLedRoiNewLampName(e.target.value);
+                                setLedRoiScenarioPreset('custom');
+                              }}
+                              className="w-full p-2 rounded-lg bg-emerald-900/80 border border-emerald-800 text-white font-semibold"
+                            />
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="block text-emerald-200 mb-1">กำลังวัตต์ LED ใหม่:</label>
+                              <div className="flex items-center gap-1">
+                                <input
+                                  type="number"
+                                  min={1}
+                                  max={1000}
+                                  value={ledRoiNewWatts}
+                                  onChange={e => {
+                                    setLedRoiNewWatts(Math.max(1, Number(e.target.value)));
+                                    setLedRoiScenarioPreset('custom');
+                                  }}
+                                  className="w-full p-2 rounded-lg bg-emerald-900/80 border border-emerald-800 text-white font-bold font-mono"
+                                />
+                                <span className="text-emerald-300 font-mono">W</span>
+                              </div>
+                            </div>
+
+                            <div>
+                              <label className="block text-emerald-200 mb-1">ราคาโคม/หลอด LED:</label>
+                              <div className="flex items-center gap-1">
+                                <input
+                                  type="number"
+                                  min={0}
+                                  max={50000}
+                                  value={ledRoiCostPerFixture}
+                                  onChange={e => {
+                                    setLedRoiCostPerFixture(Math.max(0, Number(e.target.value)));
+                                    setLedRoiScenarioPreset('custom');
+                                  }}
+                                  className="w-full p-2 rounded-lg bg-emerald-900/80 border border-emerald-800 text-white font-bold font-mono"
+                                />
+                                <span className="text-emerald-300 font-mono">บ.</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="p-2 rounded-lg bg-emerald-900/80 border border-emerald-800 text-[11px] text-emerald-200 flex justify-between items-center">
+                            <span>โหลดไฟ LED รวม ({ledRoiQty} โคม):</span>
+                            <span className="font-mono font-bold text-emerald-300">{totalNewPowerKw.toFixed(2)} kW</span>
+                          </div>
+                        </div>
+
+                      </div>
+
+                      {/* Section 2: Operational & Energy Usage Parameters */}
+                      <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-3.5">
+                        <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                          <span className="font-bold text-slate-800 flex items-center gap-1.5">
+                            <SlidersHorizontal className="w-4 h-4 text-emerald-600" />
+                            ข้อมูลการใช้งานจริงและอัตราค่าไฟฟ้า (Operational Factors)
+                          </span>
+                          <span className="text-[11px] text-slate-500 font-mono">
+                            เปิดใช้งาน {annualOperatingHours.toLocaleString()} ชม./ปี
+                          </span>
+                        </div>
+
+                        {/* Fixture Quantity */}
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="font-bold text-slate-700">
+                              จำนวนจุดติดตั้ง / โคมไฟทั้งหมด (จุด/โคม):
+                            </label>
+                            <span className="font-mono font-black text-slate-900 bg-white px-2 py-0.5 rounded border border-slate-300">
+                              {ledRoiQty} โคม
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <input
+                              type="range"
+                              min={1}
+                              max={500}
+                              value={ledRoiQty}
+                              onChange={e => setLedRoiQty(Number(e.target.value))}
+                              className="flex-1 accent-emerald-600"
+                            />
+                            <div className="flex items-center gap-1">
+                              {[20, 50, 100, 200].map(q => (
+                                <button
+                                  key={q}
+                                  type="button"
+                                  onClick={() => setLedRoiQty(q)}
+                                  className={`px-2 py-1 rounded text-[10px] font-bold border transition ${
+                                    ledRoiQty === q
+                                      ? 'bg-emerald-600 text-white border-emerald-700'
+                                      : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
+                                  }`}
+                                >
+                                  {q}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                          {/* Hours per Day */}
+                          <div>
+                            <label className="block font-bold text-slate-700 mb-1">
+                              ชั่วโมงเปิดไฟต่อวัน:
+                            </label>
+                            <div className="flex items-center gap-1.5">
+                              <input
+                                type="number"
+                                min={1}
+                                max={24}
+                                value={ledRoiHoursPerDay}
+                                onChange={e => setLedRoiHoursPerDay(Math.min(24, Math.max(1, Number(e.target.value))))}
+                                className="w-full p-2 rounded-lg border border-slate-300 font-bold font-mono bg-white"
+                              />
+                              <span className="text-slate-500 font-mono whitespace-nowrap">ชม./วัน</span>
+                            </div>
+                          </div>
+
+                          {/* Days per Year */}
+                          <div>
+                            <label className="block font-bold text-slate-700 mb-1">
+                              จำนวนวันเปิดต่อปี:
+                            </label>
+                            <div className="flex items-center gap-1.5">
+                              <input
+                                type="number"
+                                min={1}
+                                max={365}
+                                value={ledRoiDaysPerYear}
+                                onChange={e => setLedRoiDaysPerYear(Math.min(365, Math.max(1, Number(e.target.value))))}
+                                className="w-full p-2 rounded-lg border border-slate-300 font-bold font-mono bg-white"
+                              />
+                              <span className="text-slate-500 font-mono whitespace-nowrap">วัน/ปี</span>
+                            </div>
+                          </div>
+
+                          {/* Electricity Tariff */}
+                          <div>
+                            <label className="block font-bold text-slate-700 mb-1">
+                              อัตราค่าไฟฟ้าเฉลี่ย:
+                            </label>
+                            <div className="flex items-center gap-1.5">
+                              <input
+                                type="number"
+                                step={0.1}
+                                min={1}
+                                max={15}
+                                value={ledRoiElectricityRate}
+                                onChange={e => setLedRoiElectricityRate(Math.max(0.5, Number(e.target.value)))}
+                                className="w-full p-2 rounded-lg border border-slate-300 font-bold font-mono bg-white"
+                              />
+                              <span className="text-slate-500 font-mono whitespace-nowrap">บ./kWh</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Installation Labor & HVAC Saving Toggle */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-200">
+                          <div>
+                            <label className="block font-bold text-slate-700 mb-1">
+                              ค่าแรงติดตั้ง/รื้อถอนต่อจุด (บาท):
+                            </label>
+                            <input
+                              type="number"
+                              min={0}
+                              max={5000}
+                              value={ledRoiInstallCostPerFixture}
+                              onChange={e => setLedRoiInstallCostPerFixture(Math.max(0, Number(e.target.value)))}
+                              className="w-full p-2 rounded-lg border border-slate-300 font-bold font-mono bg-white"
+                            />
+                          </div>
+
+                          <div className="flex flex-col justify-end">
+                            <label className="flex items-center gap-2 p-2 rounded-lg bg-white border border-slate-200 cursor-pointer hover:bg-slate-50 transition">
+                              <input
+                                type="checkbox"
+                                checked={ledRoiIncludeHvac}
+                                onChange={e => setLedRoiIncludeHvac(e.target.checked)}
+                                className="w-4 h-4 accent-emerald-600 rounded"
+                              />
+                              <div>
+                                <span className="font-bold text-slate-800 block text-[11px]">
+                                  รวมผลประหยัดโหลดแอร์ (+28%)
+                                </span>
+                                <span className="text-[10px] text-slate-500 block">
+                                  ลดความร้อนหลอดเดิมในห้องแอร์
+                                </span>
+                              </div>
+                            </label>
+                          </div>
+                        </div>
+
+                      </div>
+
+                    </div>
+
+                    {/* Right Column: Financial Returns, Payback Period & Projections (5 cols) */}
+                    <div className="lg:col-span-5 space-y-4">
+                      
+                      {/* 4 Big KPI Highlight Cards */}
+                      <div className="grid grid-cols-2 gap-3">
+                        
+                        {/* 1. Payback Period */}
+                        <div className="p-4 rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-700 text-white shadow-md space-y-1 relative overflow-hidden">
+                          <div className="absolute right-0 top-0 translate-x-3 -translate-y-3 w-16 h-16 bg-white/10 rounded-full blur-sm pointer-events-none"></div>
+                          <div className="text-[10px] font-bold text-emerald-100 uppercase tracking-wider flex items-center gap-1">
+                            <Clock className="w-3.5 h-3.5" />
+                            ระยะเวลาคืนทุน
+                          </div>
+                          <div className="text-2xl sm:text-3xl font-black font-mono text-white">
+                            {paybackPeriodMonths < 12 
+                              ? `${paybackPeriodMonths.toFixed(1)} เดือน`
+                              : `${paybackPeriodYears.toFixed(1)} ปี`
+                            }
+                          </div>
+                          <div className="text-[11px] text-emerald-100 font-medium">
+                            {paybackPeriodMonths < 12 
+                              ? `(~${paybackPeriodYears.toFixed(2)} ปี คืนทุนเร็วมาก)`
+                              : `(~${paybackPeriodMonths.toFixed(0)} เดือน)`
+                            }
+                          </div>
+                        </div>
+
+                        {/* 2. Annual ROI % */}
+                        <div className="p-4 rounded-2xl bg-gradient-to-br from-indigo-900 to-slate-900 text-white shadow-md space-y-1 border border-indigo-800/50">
+                          <div className="text-[10px] font-bold text-indigo-300 uppercase tracking-wider flex items-center gap-1">
+                            <Percent className="w-3.5 h-3.5" />
+                            ผลตอบแทนต่อปี (ROI)
+                          </div>
+                          <div className="text-2xl sm:text-3xl font-black font-mono text-amber-400">
+                            {annualRoiPercent.toFixed(0)}%
+                          </div>
+                          <div className="text-[11px] text-slate-300 font-medium">
+                            กำไรจากค่าไฟที่ลดได้
+                          </div>
+                        </div>
+
+                        {/* 3. Monthly Savings */}
+                        <div className="p-3.5 rounded-2xl bg-slate-900 text-white shadow-sm space-y-0.5 border border-slate-800">
+                          <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                            <PiggyBank className="w-3.5 h-3.5 text-emerald-400" />
+                            ประหยัดต่อเดือน
+                          </div>
+                          <div className="text-lg font-black font-mono text-emerald-400">
+                            ฿{Math.round(monthlySavingsThb).toLocaleString()}
+                          </div>
+                          <div className="text-[10px] text-slate-400">
+                            บาท / เดือน
+                          </div>
+                        </div>
+
+                        {/* 4. Annual Savings */}
+                        <div className="p-3.5 rounded-2xl bg-slate-900 text-white shadow-sm space-y-0.5 border border-slate-800">
+                          <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                            <TrendingUp className="w-3.5 h-3.5 text-amber-400" />
+                            ประหยัดต่อปี
+                          </div>
+                          <div className="text-lg font-black font-mono text-amber-400">
+                            ฿{Math.round(totalAnnualSavingsThb).toLocaleString()}
+                          </div>
+                          <div className="text-[10px] text-slate-400">
+                            บาท / ปี
+                          </div>
+                        </div>
+
+                      </div>
+
+                      {/* Financial & Energy Breakdown Card */}
+                      <div className="p-4 rounded-xl bg-slate-900 text-white border border-slate-800 space-y-2.5 text-xs">
+                        <div className="text-[11px] font-bold text-amber-400 uppercase tracking-wider border-b border-slate-800 pb-1.5 flex items-center justify-between">
+                          <span>สรุปผลประโยชน์ทางวิศวกรรม & การเงิน</span>
+                          <span className="text-[10px] text-slate-400 font-normal">({ledRoiQty} โคม)</span>
+                        </div>
+
+                        <div className="flex items-center justify-between text-slate-300">
+                          <span>เงินลงทุนรวม (อุปกรณ์ + ค่าแรง):</span>
+                          <span className="font-mono font-bold text-white">฿{Math.round(totalInvestmentCostThb).toLocaleString()}</span>
+                        </div>
+
+                        <div className="flex items-center justify-between text-slate-300">
+                          <span>ลดกำลังไฟฟ้าแสงสว่าง:</span>
+                          <span className="font-mono font-bold text-emerald-400">
+                            -{directPowerSavedKw.toFixed(2)} kW ({powerReductionPercent.toFixed(1)}%)
+                          </span>
+                        </div>
+
+                        {ledRoiIncludeHvac && (
+                          <div className="flex items-center justify-between text-slate-400 text-[11px]">
+                            <span>+ ลดภาระแอร์ (HVAC Cooling):</span>
+                            <span className="font-mono text-teal-300">+{hvacPowerSavedKw.toFixed(2)} kW</span>
+                          </div>
+                        )}
+
+                        <div className="flex items-center justify-between text-slate-300">
+                          <span>พลังงานไฟฟ้าที่ประหยัดได้ต่อปี:</span>
+                          <span className="font-mono font-bold text-amber-300">
+                            {Math.round(annualEnergySavedKwh).toLocaleString()} kWh/ปี
+                          </span>
+                        </div>
+
+                        <div className="flex items-center justify-between text-slate-300 pt-1 border-t border-slate-800">
+                          <span>เงินประหยัดค่าไฟต่อปี:</span>
+                          <span className="font-mono font-bold text-white">฿{Math.round(annualElectricityCostSavedThb).toLocaleString()}</span>
+                        </div>
+
+                        <div className="flex items-center justify-between text-slate-300">
+                          <span>เงินประหยัดค่าบำรุงรักษาต่อปี:</span>
+                          <span className="font-mono font-bold text-white">฿{Math.round(annualMaintenanceCostSavedThb).toLocaleString()}</span>
+                        </div>
+                      </div>
+
+                      {/* Cumulative Cash Flow Projections */}
+                      <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2.5 text-xs">
+                        <div className="flex items-center justify-between border-b border-slate-200 pb-1.5">
+                          <span className="font-bold text-slate-800 flex items-center gap-1">
+                            <BarChart3 className="w-3.5 h-3.5 text-emerald-600" />
+                            ผลประหยัดสุทธิสะสม (Net Cumulative Savings)
+                          </span>
+                          <span className="text-[10px] text-slate-500">หักเงินลงทุนแล้ว</span>
+                        </div>
+
+                        <div className="space-y-1.5 font-mono">
+                          <div className="flex items-center justify-between text-[11px]">
+                            <span className="text-slate-600 font-sans">สะสมปีที่ 1:</span>
+                            <span className={`font-bold ${totalAnnualSavingsThb - totalInvestmentCostThb >= 0 ? 'text-emerald-700' : 'text-slate-700'}`}>
+                              ฿{Math.round(totalAnnualSavingsThb - totalInvestmentCostThb).toLocaleString()}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between text-[11px]">
+                            <span className="text-slate-600 font-sans">สะสมปีที่ 3:</span>
+                            <span className="font-bold text-emerald-700">
+                              ฿{Math.round(threeYearNetSavingsThb).toLocaleString()}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between text-[11px] bg-emerald-50 p-1.5 rounded border border-emerald-100">
+                            <span className="text-emerald-900 font-sans font-bold">สะสมปีที่ 5 (มาตรฐาน):</span>
+                            <span className="font-bold text-emerald-800 text-xs">
+                              ฿{Math.round(fiveYearNetSavingsThb).toLocaleString()}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between text-[11px]">
+                            <span className="text-slate-600 font-sans">สะสมปีที่ 10:</span>
+                            <span className="font-bold text-emerald-700">
+                              ฿{Math.round(tenYearNetSavingsThb).toLocaleString()}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Environmental ESG Card */}
+                        <div className="pt-2 border-t border-slate-200 flex items-center justify-between text-[11px] text-emerald-800 bg-emerald-50/70 p-2 rounded-lg">
+                          <div className="flex items-center gap-1.5 font-bold">
+                            <Leaf className="w-4 h-4 text-emerald-600 shrink-0" />
+                            <span>ลด CO2: {annualCo2SavedKg.toFixed(0)} kg/ปี</span>
+                          </div>
+                          <span className="text-slate-600">
+                            🌳 เทียบเท่าปลูกต้นไม้ <strong>{equivalentTreesPlanted}</strong> ต้น/ปี
+                          </span>
+                        </div>
+
+                      </div>
+
+                    </div>
+
+                  </div>
+
                 </div>
               )}
 
