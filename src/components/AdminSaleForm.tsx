@@ -13,6 +13,7 @@ import { SignaturePad } from './SignaturePad';
 import { generateNextDocNumber } from '../utils/storage';
 import { DocumentPrintModal } from './DocumentPrintModal';
 import { FileViewerModal } from './FileViewerModal';
+import { User as FirebaseUser } from 'firebase/auth';
 
 interface AdminSaleFormProps {
   requests?: EEngineerRequest[];
@@ -25,6 +26,7 @@ interface AdminSaleFormProps {
   onOpenLocation?: () => void;
   onCloseForm?: () => void;
   onOpenDocumentPrint?: (request: EEngineerRequest) => void;
+  currentUser?: FirebaseUser | null;
 }
 
 export const AdminSaleForm: React.FC<AdminSaleFormProps> = ({
@@ -38,6 +40,7 @@ export const AdminSaleForm: React.FC<AdminSaleFormProps> = ({
   onOpenLocation,
   onCloseForm,
   onOpenDocumentPrint,
+  currentUser,
 }) => {
   const currentDocNumber = nextDocNumber || generateNextDocNumber(requests);
 
@@ -505,6 +508,34 @@ export const AdminSaleForm: React.FC<AdminSaleFormProps> = ({
                 <Unlock className="w-4 h-4 text-slate-950" />
                 <span>เข้าสู่ระบบ Admin Sale (Sign In)</span>
               </button>
+
+              {currentUser && (
+                <div className="mt-3 p-3 rounded-xl bg-slate-800/90 border border-amber-500/40 text-xs">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-7 h-7 rounded-full bg-gradient-to-br from-amber-400 to-amber-600 text-slate-950 font-bold flex items-center justify-center text-xs shrink-0">
+                      {currentUser.displayName ? currentUser.displayName[0].toUpperCase() : 'G'}
+                    </div>
+                    <div className="min-w-0 flex-1 text-left">
+                      <div className="text-white font-bold truncate flex items-center gap-1.5">
+                        <span>{currentUser.displayName || 'Google Account'}</span>
+                        <span className="px-1 py-0.2 rounded text-[9px] font-bold bg-red-500/20 text-red-300 border border-red-500/30">Gmail</span>
+                      </div>
+                      <div className="text-amber-300 font-mono text-[11px] truncate flex items-center gap-1 font-semibold">
+                        <Mail className="w-3 h-3 text-amber-400 shrink-0" />
+                        <span>{currentUser.email}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsAuthorized(true)}
+                    className="w-full mt-2.5 py-2 px-3 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/50 font-bold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer"
+                  >
+                    <Unlock className="w-3.5 h-3.5" />
+                    เข้าสู่ระบบด้วยบัญชี Gmail นี้ทันที (Google Verified)
+                  </button>
+                </div>
+              )}
             </div>
 
             <div className="text-center pt-2 space-y-1">
@@ -617,6 +648,13 @@ export const AdminSaleForm: React.FC<AdminSaleFormProps> = ({
                 <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
                 <span>Signed in as: <strong className="text-white">Admin Sale</strong></span>
               </div>
+              {currentUser && (
+                <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg bg-slate-800 border border-amber-500/30 text-slate-200 text-[11px]">
+                  <Mail className="w-3 h-3 text-amber-400" />
+                  <span className="text-slate-400">Gmail:</span>
+                  <span className="text-amber-300 font-mono font-bold">{currentUser.email}</span>
+                </div>
+              )}
               <h2 className="text-sm sm:text-base font-bold text-white flex items-center gap-1.5">
                 <FileText className="w-4 h-4 text-amber-400" />
                 ใบคำขอรับบริการและประสานงานวิศวกร (E-Engineer Service Request Form)

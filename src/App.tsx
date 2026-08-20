@@ -394,6 +394,7 @@ export const App: React.FC = () => {
             onOpenLocation={() => setIsLocationOpen(true)}
             onOpenDocumentPrint={req => setPrintRequest(req)}
             onCloseForm={() => setCurrentRole('sale')}
+            currentUser={currentUser}
           />
         )}
 

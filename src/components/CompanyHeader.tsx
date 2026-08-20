@@ -1,5 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Building2, ShieldCheck, Clock, MapPin, Zap, LogIn, LogOut, Cloud, HelpCircle, ChevronLeft, ChevronRight, SlidersHorizontal } from 'lucide-react';
+import { 
+  Building2, ShieldCheck, Clock, MapPin, Zap, LogIn, LogOut, Cloud, HelpCircle, 
+  ChevronLeft, ChevronRight, SlidersHorizontal, Mail, Copy, Check, UserCircle, CheckCircle2 
+} from 'lucide-react';
 import { Role } from '../types';
 import { User } from 'firebase/auth';
 
@@ -37,10 +40,17 @@ export const CompanyHeader: React.FC<CompanyHeaderProps> = ({
   onSignOutGoogle,
 }) => {
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [copiedEmail, setCopiedEmail] = useState(false);
   const navContainerRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
   const [scrollProgress, setScrollProgress] = useState(0);
+
+  const handleCopyEmail = (email: string) => {
+    navigator.clipboard.writeText(email);
+    setCopiedEmail(true);
+    setTimeout(() => setCopiedEmail(false), 2000);
+  };
 
   // Mouse drag-to-scroll state
   const [isDragging, setIsDragging] = useState(false);
@@ -211,50 +221,127 @@ export const CompanyHeader: React.FC<CompanyHeaderProps> = ({
                   <button
                     id="btn-user-profile"
                     onClick={() => setShowUserMenu(!showUserMenu)}
-                    className="inline-flex items-center gap-2 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-medium transition"
+                    className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-800/90 hover:bg-slate-800 border border-amber-500/40 hover:border-amber-400 text-xs font-medium transition shadow-md group cursor-pointer"
+                    title={`เข้าสู่ระบบด้วย Gmail: ${currentUser.email || ''}`}
                   >
-                    {currentUser.photoURL ? (
-                      <img
-                        src={currentUser.photoURL}
-                        alt="User Avatar"
-                        className="w-5 h-5 rounded-full"
-                        referrerPolicy="no-referrer"
-                      />
-                    ) : (
-                      <div className="w-5 h-5 rounded-full bg-amber-500 text-slate-950 font-bold text-[10px] flex items-center justify-center">
-                        {currentUser.displayName ? currentUser.displayName[0] : 'U'}
+                    <div className="relative shrink-0">
+                      {currentUser.photoURL ? (
+                        <img
+                          src={currentUser.photoURL}
+                          alt="User Avatar"
+                          className="w-7 h-7 rounded-full border border-amber-400/60 object-cover"
+                          referrerPolicy="no-referrer"
+                        />
+                      ) : (
+                        <div className="w-7 h-7 rounded-full bg-gradient-to-br from-amber-400 to-amber-600 text-slate-950 font-bold text-xs flex items-center justify-center shadow-xs">
+                          {currentUser.displayName ? currentUser.displayName[0].toUpperCase() : (currentUser.email ? currentUser.email[0].toUpperCase() : 'G')}
+                        </div>
+                      )}
+                      <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-400 border border-slate-900 ring-1 ring-emerald-500"></span>
+                    </div>
+
+                    <div className="text-left leading-tight">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[11px] font-bold text-white max-w-[110px] sm:max-w-[140px] truncate">
+                          {currentUser.displayName || 'Google User'}
+                        </span>
+                        <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-red-500/20 text-red-300 border border-red-500/30">
+                          Gmail
+                        </span>
                       </div>
-                    )}
-                    <span className="max-w-[120px] truncate text-slate-200">
-                      {currentUser.displayName || currentUser.email}
-                    </span>
+                      <div className="text-[11px] text-amber-300 font-mono font-semibold flex items-center gap-1">
+                        <Mail className="w-3 h-3 text-amber-400 shrink-0" />
+                        <span className="max-w-[140px] sm:max-w-[200px] truncate">
+                          {currentUser.email}
+                        </span>
+                      </div>
+                    </div>
                   </button>
 
                   {showUserMenu && (
-                    <div className="absolute right-0 top-10 w-64 bg-slate-800 rounded-xl shadow-2xl border border-slate-700 p-3 z-50 animate-fadeIn">
-                      <div className="pb-2 border-b border-slate-700">
-                        <div className="text-xs font-bold text-white truncate">
-                          {currentUser.displayName || 'ผู้ใช้งาน'}
-                        </div>
-                        <div className="text-[11px] text-slate-400 truncate">
-                          {currentUser.email}
-                        </div>
-                        <div className="mt-1 text-[10px] text-emerald-400 font-medium flex items-center gap-1">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                          เข้าสู่ระบบด้วย Google เรียบร้อย
+                    <div className="absolute right-0 top-12 w-80 bg-slate-850 rounded-2xl shadow-2xl border border-slate-700 p-4 z-50 animate-fadeIn backdrop-blur-md bg-slate-900/95 text-white">
+                      
+                      {/* User Account Details */}
+                      <div className="flex items-start gap-3 pb-3 border-b border-slate-700">
+                        {currentUser.photoURL ? (
+                          <img
+                            src={currentUser.photoURL}
+                            alt="User Avatar"
+                            className="w-12 h-12 rounded-full border-2 border-amber-400 object-cover shrink-0"
+                            referrerPolicy="no-referrer"
+                          />
+                        ) : (
+                          <div className="w-12 h-12 rounded-full bg-gradient-to-br from-amber-400 to-amber-600 text-slate-950 font-bold text-lg flex items-center justify-center shrink-0">
+                            {currentUser.displayName ? currentUser.displayName[0].toUpperCase() : (currentUser.email ? currentUser.email[0].toUpperCase() : 'G')}
+                          </div>
+                        )}
+
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-bold text-white truncate">
+                            {currentUser.displayName || 'Google Account'}
+                          </div>
+                          
+                          {/* Prominent Gmail Display with Copy Action */}
+                          <div className="mt-1 flex items-center justify-between gap-1 p-1.5 rounded-lg bg-slate-800/90 border border-slate-700">
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <Mail className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                              <span className="text-xs font-mono font-bold text-amber-300 truncate">
+                                {currentUser.email}
+                              </span>
+                            </div>
+                            {currentUser.email && (
+                              <button
+                                type="button"
+                                onClick={() => handleCopyEmail(currentUser.email!)}
+                                className="p-1 rounded hover:bg-slate-700 text-slate-400 hover:text-white transition shrink-0 cursor-pointer"
+                                title="คัดลอกอีเมล"
+                              >
+                                {copiedEmail ? (
+                                  <Check className="w-3.5 h-3.5 text-emerald-400" />
+                                ) : (
+                                  <Copy className="w-3.5 h-3.5" />
+                                )}
+                              </button>
+                            )}
+                          </div>
+
+                          <div className="mt-2 flex items-center gap-1.5 text-[10px] text-emerald-400 font-medium">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                            <span>ยืนยันตัวตนด้วยบัญชี Gmail สำเร็จ</span>
+                          </div>
                         </div>
                       </div>
-                      <button
-                        id="btn-sign-out"
-                        onClick={() => {
-                          setShowUserMenu(false);
-                          onSignOutGoogle();
-                        }}
-                        className="w-full mt-2 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 text-xs font-medium transition"
-                      >
-                        <LogOut className="w-3.5 h-3.5" />
-                        ออกจากระบบ (Sign Out)
-                      </button>
+
+                      {/* Account Meta & Security Info */}
+                      <div className="py-2.5 space-y-1.5 text-xs text-slate-300 border-b border-slate-700/80">
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="text-slate-400">สถานะเชื่อมต่อ:</span>
+                          <span className="text-emerald-400 font-medium">Firebase Auth (Google GSI)</span>
+                        </div>
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="text-slate-400">สิทธิ์การใช้งาน:</span>
+                          <span className="font-bold text-amber-300">LUMENCRAFT Staff / Engineer</span>
+                        </div>
+                        <div className="text-[10px] text-slate-400 pt-1">
+                          📌 ข้อมูลการออกใบคำขอและตอบกลับจะบันทึกอีเมลของคุณเป็นหลักฐานโดยอัตโนมัติ
+                        </div>
+                      </div>
+
+                      {/* Sign Out Action */}
+                      <div className="pt-3 flex gap-2">
+                        <button
+                          id="btn-sign-out"
+                          onClick={() => {
+                            setShowUserMenu(false);
+                            onSignOutGoogle();
+                          }}
+                          className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 hover:text-rose-200 border border-rose-500/40 text-xs font-bold transition cursor-pointer"
+                        >
+                          <LogOut className="w-3.5 h-3.5" />
+                          ออกจากระบบ (Sign Out)
+                        </button>
+                      </div>
+
                     </div>
                   )}
                 </div>
@@ -262,11 +349,11 @@ export const CompanyHeader: React.FC<CompanyHeaderProps> = ({
                 <button
                   id="btn-google-login"
                   onClick={onSignInGoogle}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-md transition"
+                  className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 shadow-md transition cursor-pointer"
                   title="เข้าสู่ระบบด้วย Google Account (Gmail)"
                 >
                   <LogIn className="w-3.5 h-3.5 text-slate-950" />
-                  เข้าสู่ระบบด้วย Gmail
+                  <span>เข้าสู่ระบบด้วย Gmail</span>
                 </button>
               )}
             </div>
